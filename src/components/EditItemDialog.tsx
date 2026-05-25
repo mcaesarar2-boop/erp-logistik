@@ -13,8 +13,8 @@ interface EditItemDialogProps {
     id: string
     name: string
     code: string
-    description: string | null
-    imageUrl: string | null // <--- TAMBAHKAN INI
+    description?: string | null
+    imageUrl?: string | null // <--- TAMBAHKAN INI
     status: string
     quantity: number
     rentedQuantity: number
