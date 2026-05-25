@@ -8,6 +8,7 @@ import { EditCategoryDialog } from "@/components/EditCategoryDialog";
 import { DeleteCategoryDialog } from "@/components/DeleteCategoryDialog";
 import { Search, ArrowUpDown } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 type Category = {
   id: string;
@@ -39,6 +40,7 @@ export default function MultiLayerDashboard({ items, categories }: MultiLayerDas
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>('name_asc');
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   // CEK ADMIN CLIENT SIDE
   const [isAdmin, setIsAdmin] = useState(false)
@@ -238,7 +240,12 @@ export default function MultiLayerDashboard({ items, categories }: MultiLayerDas
                 <div key={item.id} className="rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/60 transition-all flex flex-col min-h-[320px] overflow-hidden shadow-lg">
                   <div className="h-48 w-full bg-zinc-950/50 relative group overflow-hidden border-b border-zinc-800">
                     {item.imageUrl ? (
-                      <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                      <img 
+                        src={item.imageUrl} 
+                        alt={item.name} 
+                        onClick={() => setSelectedImage(item.imageUrl!)}
+                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 cursor-pointer" 
+                      />
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center text-zinc-700">
                         <span className="text-xs font-bold uppercase tracking-widest border border-zinc-800 px-3 py-1 rounded-full">No Image</span>
@@ -306,6 +313,20 @@ export default function MultiLayerDashboard({ items, categories }: MultiLayerDas
           )}
         </div>
       )}
+
+      {/* --- KOTAK POPUP PREVIEW FOTO --- */}
+      <Dialog open={!!selectedImage} onOpenChange={(open) => !open && setSelectedImage(null)}>
+        <DialogContent className="bg-zinc-950/95 border-zinc-800 p-2 rounded-2xl shadow-2xl max-w-4xl flex justify-center items-center">
+          <DialogTitle className="sr-only">Preview Foto Aset</DialogTitle>
+          {selectedImage && (
+            <img 
+              src={selectedImage} 
+              alt="Preview" 
+              className="w-full h-auto max-h-[85vh] object-contain rounded-xl" 
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
