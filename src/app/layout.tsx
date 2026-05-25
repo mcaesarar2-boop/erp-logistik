@@ -44,10 +44,7 @@ export default function RootLayout({
                   ERP<span className="text-zinc-500">Logistik</span>
                 </span>
               </div>
-              <div className="flex items-center gap-4">
-                <span className="text-sm font-medium text-zinc-400 hidden sm:block">Admin Logistik</span>
-                <UserMenu />
-              </div>
+              <UserMenu />
             </div>
           </header>
 
