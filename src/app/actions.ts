@@ -71,6 +71,7 @@ export async function createItem(formData: FormData) {
     const description = formData.get("description") as string
     // Hindari NaN dengan fallback fallback ke 0
     const quantity = parseInt(formData.get("quantity") as string) || 0 
+    const price = parseInt(formData.get("price") as string) || 0
     const categoryIds = formData.getAll("categories") as string[]
     
     const imageFile = formData.get("image") as File | null
@@ -85,6 +86,7 @@ export async function createItem(formData: FormData) {
         code,
         description,
         quantity,
+        price,
         categories: {
           connect: categoryIds.map(id => ({ id }))
         },
@@ -121,6 +123,7 @@ export async function updateItem(id: string, formData: FormData) {
     const quantity = parseInt(formData.get("quantity") as string) || 0
     const rentedQuantity = parseInt(formData.get("rentedQuantity") as string) || 0
     const maintenanceQuantity = parseInt(formData.get("maintenanceQuantity") as string) || 0
+    const price = parseInt(formData.get("price") as string) || 0
     const categoryIds = formData.getAll("categories") as string[]
 
     const imageFile = formData.get("image") as File | null
@@ -137,6 +140,7 @@ export async function updateItem(id: string, formData: FormData) {
         quantity,
         rentedQuantity,
         maintenanceQuantity,
+        price,
         categories: {
           set: categoryIds.map(id => ({ id }))
         },

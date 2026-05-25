@@ -26,6 +26,7 @@ type Item = {
   status: string;
   imageUrl?: string | null;
   categories: Category[];
+  price?: number | null;
   createdAt?: string | Date;
   updatedAt?: string | Date;
 };
@@ -116,6 +117,11 @@ export default function MultiLayerDashboard({ items, categories }: MultiLayerDas
   const availableUnits = items.reduce((acc, item) => acc + item.quantity, 0);
   const rentedUnits = items.reduce((acc, item) => acc + item.rentedQuantity, 0);
   const maintenanceUnits = items.reduce((acc, item) => acc + item.maintenanceQuantity, 0);
+  
+  const totalValuation = items.reduce((acc, item) => {
+    const totalQty = item.quantity + item.rentedQuantity + item.maintenanceQuantity;
+    return acc + (totalQty * (item.price || 0));
+  }, 0);
 
   const TABS = [
     { id: 'home', label: 'Home (Highlight)' },
@@ -149,6 +155,14 @@ export default function MultiLayerDashboard({ items, categories }: MultiLayerDas
       {activeLayer === 'home' && (
         <div className="space-y-6">
           <h2 className="text-xl font-bold text-zinc-100">Ringkasan Sistem Logistik</h2>
+          
+          <div className="p-6 bg-zinc-900/40 border border-zinc-800 rounded-xl shadow-sm flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-zinc-500 mb-1">Total Valuasi Seluruh Aset</p>
+              <p className="text-4xl font-bold text-blue-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(totalValuation)}</p>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="p-6 bg-zinc-900/40 border border-zinc-800 rounded-xl shadow-sm">
               <p className="text-sm font-medium text-zinc-500 mb-1">Total Jenis Aset</p>
@@ -284,6 +298,13 @@ export default function MultiLayerDashboard({ items, categories }: MultiLayerDas
                       <div className="mb-4"></div>
                     )}
                     
+                    <div className="bg-zinc-950/50 rounded-lg p-3 mb-4 border border-zinc-800/50">
+                      <p className="text-xs text-zinc-500 mb-1">Valuasi Item (Total Unit x Harga)</p>
+                      <p className="text-sm font-bold text-blue-400">
+                        {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format((item.quantity + item.rentedQuantity + item.maintenanceQuantity) * (item.price || 0))}
+                      </p>
+                    </div>
+
                     <div className="flex justify-between items-end border-t border-zinc-800/50 pt-4 mt-auto">
                       {isAdmin && (
                         <div className="flex items-center gap-2">

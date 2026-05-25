@@ -119,6 +119,10 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
                 <Input name="quantity" type="number" min="1" placeholder="1" className="bg-zinc-900 border-zinc-800" required />
               </div>
             </div>
+            <div className="space-y-2">
+              <Label>Harga Beli Satuan (Rp)</Label>
+              <Input name="price" type="number" min="0" placeholder="0" className="bg-zinc-900 border-zinc-800" required />
+            </div>
             
             <div className="space-y-2">
               <Label>Foto Barang (Opsional)</Label>

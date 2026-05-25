@@ -19,6 +19,7 @@ interface EditItemDialogProps {
     quantity: number
     rentedQuantity: number
     maintenanceQuantity: number
+    price?: number | null
     categories: { id: string; name: string }[]
   }
   allCategories: { id: string; name: string }[]
@@ -132,6 +133,11 @@ export function EditItemDialog({ item, allCategories }: EditItemDialogProps) {
           <div className="space-y-2">
             <Label>Kode Aset</Label>
             <Input name="code" defaultValue={item.code} className="bg-zinc-900 border-zinc-800" required />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Harga Beli Satuan (Rp)</Label>
+            <Input name="price" type="number" min="0" defaultValue={item.price || 0} className="bg-zinc-900 border-zinc-800" required />
           </div>
 
           <div className="space-y-2">
