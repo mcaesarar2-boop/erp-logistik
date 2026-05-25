@@ -36,10 +36,25 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
   const [selectedItemId, setSelectedItemId] = useState("")
   const [showResults, setShowResults] = useState(false)
 
+  // STATE UNTUK AUTO-SUGGEST ASET BARU
+  const [newName, setNewName] = useState("")
+  const [showNameResults, setShowNameResults] = useState(false)
+  const [newCode, setNewCode] = useState("")
+  const [showCodeResults, setShowCodeResults] = useState(false)
+
   const filteredItems = items.filter(item => 
     item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     item.code.toLowerCase().includes(searchQuery.toLowerCase())
   )
+
+  // LOGIKA PENCARIAN REKOMENDASI NAMA & KODE (Max 5 item)
+  const suggestedNames = Array.from(new Set(items.map(i => i.name)))
+    .filter(name => name.toLowerCase().includes(newName.toLowerCase()) && name !== newName)
+    .slice(0, 5)
+
+  const suggestedCodes = Array.from(new Set(items.map(i => i.code)))
+    .filter(code => code.toLowerCase().includes(newCode.toLowerCase()) && code !== newCode)
+    .slice(0, 5)
 
   // FUNGSI CREATE YANG SUDAH DI-UPGRADE
   async function handleCreateNew(formData: FormData) {
@@ -54,6 +69,8 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
     }
 
     setOpen(false) // Tutup pop-up jika sukses 100%
+    setNewName("") // Reset input form
+    setNewCode("")
   }
 
   async function handleAddExisting(formData: FormData) {
@@ -70,7 +87,11 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
   return (
     <Dialog open={open} onOpenChange={(isOpen) => {
       setOpen(isOpen)
-      if (!isOpen) setErrorMsg(null) // Bersihkan error jika pop-up ditutup paksa
+      if (!isOpen) {
+        setErrorMsg(null) // Bersihkan error jika pop-up ditutup paksa
+        setNewName("")
+        setNewCode("")
+      }
     }}>
       <DialogTrigger asChild>
         <Button className="w-full sm:w-auto shrink-0 bg-zinc-50 text-zinc-950 hover:bg-zinc-200">
@@ -106,14 +127,64 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
 
         {!isExistingMode ? (
           <form key="form-baru" action={handleCreateNew} className="space-y-4 pt-2">
-            <div className="space-y-2">
+            <div className="space-y-2 relative z-50">
               <Label>Nama Barang</Label>
-              <Input name="name" placeholder="Contoh: Pioneer DJM-V10" className="bg-zinc-900 border-zinc-800" required />
+              <div className="relative">
+                <Input 
+                  name="name" 
+                  placeholder="Contoh: Pioneer DJM-V10" 
+                  className="bg-zinc-900 border-zinc-800" 
+                  value={newName}
+                  onChange={(e) => { setNewName(e.target.value); setShowNameResults(true); }}
+                  onFocus={() => setShowNameResults(true)}
+                  onBlur={() => setTimeout(() => setShowNameResults(false), 200)}
+                  autoComplete="off"
+                  required 
+                />
+                {showNameResults && newName && suggestedNames.length > 0 && (
+                  <div className="absolute top-full mt-1 left-0 right-0 max-h-[150px] overflow-y-auto overflow-x-hidden bg-zinc-800 border border-zinc-700 rounded-md shadow-2xl z-50">
+                    {suggestedNames.map(name => (
+                      <div 
+                        key={name} 
+                        className="p-2 px-3 text-sm text-zinc-200 hover:bg-zinc-700 cursor-pointer border-b border-zinc-700/50 last:border-0"
+                        onClick={() => { setNewName(name); setShowNameResults(false); }}
+                      >
+                        {name}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 relative z-40">
               <div className="space-y-2">
                 <Label>Kode Aset</Label>
-                <Input name="code" placeholder="DJ-MIX-001" className="bg-zinc-900 border-zinc-800" required />
+                <div className="relative">
+                  <Input 
+                    name="code" 
+                    placeholder="DJ-MIX-001" 
+                    className="bg-zinc-900 border-zinc-800" 
+                    value={newCode}
+                    onChange={(e) => { setNewCode(e.target.value); setShowCodeResults(true); }}
+                    onFocus={() => setShowCodeResults(true)}
+                    onBlur={() => setTimeout(() => setShowCodeResults(false), 200)}
+                    autoComplete="off"
+                    required 
+                  />
+                  {showCodeResults && newCode && suggestedCodes.length > 0 && (
+                    <div className="absolute top-full mt-1 left-0 right-0 max-h-[150px] overflow-y-auto overflow-x-hidden bg-zinc-800 border border-zinc-700 rounded-md shadow-2xl z-50">
+                      {suggestedCodes.map(code => (
+                        <div 
+                          key={code} 
+                          className="p-2 px-3 text-sm text-zinc-200 hover:bg-zinc-700 cursor-pointer border-b border-zinc-700/50 last:border-0"
+                          onClick={() => { setNewCode(code); setShowCodeResults(false); }}
+                        >
+                          {code}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="space-y-2">
                 <Label>Kuantitas Awal</Label>
