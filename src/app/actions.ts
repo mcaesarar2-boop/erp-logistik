@@ -329,6 +329,34 @@ export async function addBulkRental(formData: FormData) {
   }
 }
 
+// --- FUNGSI PENGEMBALIAN RENTAL (BALIK GUDANG) ---
+export async function returnBulkRental(formData: FormData) {
+  try {
+    await verifyAdmin();
+    const payloadStr = formData.get("payload") as string;
+    if (!payloadStr) return { success: false, error: "Data kosong." };
+    
+    const payload = JSON.parse(payloadStr) as { id: string; qty: number }[];
+    
+    await prisma.$transaction(async (tx) => {
+      for (const item of payload) {
+        const dbItem = await tx.item.findUnique({ where: { id: item.id } });
+        if (!dbItem) throw new Error(`Barang dengan ID ${item.id} tidak ditemukan.`);
+        if (dbItem.rentedQuantity < item.qty) throw new Error(`Jumlah pengembalian untuk ${dbItem.name} melebihi yang sedang disewa.`);
+        
+        await tx.item.update({
+          where: { id: item.id },
+          data: { quantity: dbItem.quantity + item.qty, rentedQuantity: dbItem.rentedQuantity - item.qty }
+        });
+      }
+    });
+    revalidatePath("/");
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message || "Gagal memproses pengembalian barang." };
+  }
+}
+
 // --- FUNGSI TAMBAH PEMELIHARAAN MASAL ---
 export async function addBulkMaintenance(formData: FormData) {
   try {

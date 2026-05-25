@@ -56,9 +56,9 @@ export function RentalInvoiceDialog({ items }: RentalInvoiceDialogProps) {
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) setInvoiceDate(new Date().toISOString().split('T')[0]) }}>
       <DialogTrigger asChild>
-        <button className="bg-emerald-950/50 hover:bg-emerald-900 text-emerald-400 px-3 py-1.5 rounded-md transition-colors border border-emerald-900 flex items-center justify-center shrink-0 text-sm font-medium gap-2 shadow-sm">
+        <button className="w-full sm:w-auto bg-emerald-950/50 hover:bg-emerald-900 text-emerald-400 px-3 py-1.5 rounded-md transition-colors border border-emerald-900 flex items-center justify-center shrink-0 text-sm font-medium gap-2 shadow-sm">
           <Receipt className="w-4 h-4" />
-          <span className="hidden sm:inline">Rincian Rental</span>
+          <span className="inline">Rincian Rental</span>
         </button>
       </DialogTrigger>
       {/* Tambahkan class print agar dialog menutupi seluruh layar saat dicetak dengan background putih teks hitam */}
@@ -133,9 +133,9 @@ export function RentalInvoiceDialog({ items }: RentalInvoiceDialogProps) {
           </div>
 
           {/* Tombol Aksi (Print hidden) */}
-          <div className="flex gap-3 print:hidden">
-            <button onClick={() => setOpen(false)} className="flex-1 bg-transparent hover:bg-zinc-900 border border-zinc-800 text-zinc-400 py-2.5 rounded-lg font-medium text-sm transition-colors">Batal</button>
-            <button onClick={handlePrintAndSave} disabled={rentedItems.length === 0 || isSaving} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-lg font-bold text-sm transition-colors flex items-center justify-center gap-2.5 disabled:opacity-50">
+          <div className="flex flex-col sm:flex-row gap-3 print:hidden">
+            <button type="button" onClick={() => setOpen(false)} className="w-full sm:flex-1 bg-transparent hover:bg-zinc-900 border border-zinc-800 text-zinc-400 py-2.5 rounded-lg font-medium text-sm transition-colors">Batal</button>
+            <button type="button" onClick={handlePrintAndSave} disabled={rentedItems.length === 0 || isSaving} className="w-full sm:flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-lg font-bold text-sm transition-colors flex items-center justify-center gap-2.5 disabled:opacity-50">
               {isSaving ? <Loader2 className="w-5 h-5 animate-spin shrink-0" /> : <Printer className="w-5 h-5 shrink-0" />}
               Cetak PDF & Simpan Riwayat
             </button>

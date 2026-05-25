@@ -6,10 +6,12 @@ import { DeleteItemDialog } from "@/components/DeleteItemDialog";
 import { AddCategoryDialog } from "@/components/AddCategoryDialog";
 import { EditCategoryDialog } from "@/components/EditCategoryDialog";
 import { DeleteCategoryDialog } from "@/components/DeleteCategoryDialog";
-import { Search, ArrowUpDown, History as HistoryIcon, Calendar, Trash2, Pencil, Loader2 } from "lucide-react";
+import { Search, ArrowUpDown, History as HistoryIcon, Calendar, Trash2, Pencil, Loader2, Printer } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { RentalInvoiceDialog } from "@/components/RentalInvoiceDialog";
+import { ReturnRentalDialog } from "@/components/ReturnRentalDialog";
+import { ReprintInvoiceDialog } from "@/components/ReprintInvoiceDialog";
 import { updateHistory, deleteHistory } from "@/app/actions";
 
 type Category = {
@@ -248,6 +250,14 @@ export default function MultiLayerDashboard({ items, categories, histories }: Mu
                       </div>
                       {isAdmin && (
                         <div className="flex gap-2 shrink-0 md:opacity-0 opacity-100 group-hover:opacity-100 transition-opacity z-10">
+                          {/* Tombol Cetak Ulang hanya muncul untuk tipe Invoice Rental */}
+                          {hist.type === 'INVOICE_RENTAL' && (
+                            <ReprintInvoiceDialog history={hist}>
+                              <button className="p-2 bg-zinc-800 hover:bg-zinc-700 text-emerald-400 rounded-md transition-colors shadow-sm" title="Cetak Ulang Invoice">
+                                <Printer className="w-4 h-4" />
+                              </button>
+                            </ReprintInvoiceDialog>
+                          )}
                           <button onClick={() => setEditingHistory(hist)} className="p-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-md transition-colors shadow-sm"><Pencil className="w-4 h-4" /></button>
                           <button onClick={() => setDeletingHistory(hist)} className="p-2 bg-red-950/50 hover:bg-red-900 text-red-400 rounded-md transition-colors shadow-sm"><Trash2 className="w-4 h-4" /></button>
                         </div>
@@ -344,6 +354,7 @@ export default function MultiLayerDashboard({ items, categories, histories }: Mu
               {activeLayer === 'rented' && (
                 <>
                   <div className="w-px h-4 bg-zinc-700 mx-1 hidden sm:block"></div>
+                  <ReturnRentalDialog items={itemsToDisplay} />
                   <RentalInvoiceDialog items={itemsToDisplay} />
                 </>
               )}

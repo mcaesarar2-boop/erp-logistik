@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { createItem, addStockToExistingItem } from "@/app/actions"
 import { supabase } from "@/lib/supabase"
+import { Plus } from "lucide-react"
 
 interface AddItemDialogProps {
   items: { id: string; name: string; code: string; quantity: number }[]
@@ -72,8 +73,8 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
       if (!isOpen) setErrorMsg(null) // Bersihkan error jika pop-up ditutup paksa
     }}>
       <DialogTrigger asChild>
-        <Button className="bg-zinc-50 text-zinc-950 hover:bg-zinc-200">
-          + Tambah Barang
+        <Button className="w-full sm:w-auto shrink-0 bg-zinc-50 text-zinc-950 hover:bg-zinc-200">
+          <Plus className="w-4 h-4 mr-2" /> Tambah Barang
         </Button>
       </DialogTrigger>
       <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-50 overflow-visible max-h-[90vh] overflow-y-auto">
@@ -109,7 +110,7 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
               <Label>Nama Barang</Label>
               <Input name="name" placeholder="Contoh: Pioneer DJM-V10" className="bg-zinc-900 border-zinc-800" required />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Kode Aset</Label>
                 <Input name="code" placeholder="DJ-MIX-001" className="bg-zinc-900 border-zinc-800" required />
@@ -119,7 +120,7 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
                 <Input name="quantity" type="number" min="1" placeholder="1" className="bg-zinc-900 border-zinc-800" required />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Harga Beli Satuan (Rp)</Label>
                 <Input name="price" type="number" min="0" placeholder="0" className="bg-zinc-900 border-zinc-800" required />
@@ -162,23 +163,24 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
         ) : (
           /* FORM STOK LAMA */
           <form key="form-lama" action={handleAddExisting} className="space-y-4 pt-2">
-            <div className="space-y-2 relative">
+            <div className="space-y-2 shrink-0">
               <Label>Cari Barang (Ketik Nama / Kode)</Label>
-              <Input 
-                placeholder="Mulai ketik pencarian..." 
-                className="bg-zinc-900 border-zinc-800"
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value)
-                  setSelectedItemId("")
-                  setShowResults(true)
-                }}
-                onFocus={() => setShowResults(true)}
-              />
-              <input type="hidden" name="itemId_validator" value={selectedItemId} required />
+              <div className="relative z-50">
+                <Input 
+                  placeholder="Mulai ketik pencarian..." 
+                  className="bg-zinc-900 border-zinc-800"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value)
+                    setSelectedItemId("")
+                    setShowResults(true)
+                  }}
+                  onFocus={() => setShowResults(true)}
+                />
+                <input type="hidden" name="itemId_validator" value={selectedItemId} required />
 
-              {showResults && searchQuery && (
-                <div className="absolute top-[65px] left-0 right-0 max-h-[150px] overflow-y-auto bg-zinc-800 border border-zinc-700 rounded-md shadow-2xl z-50">
+                {showResults && searchQuery && (
+                  <div className="absolute top-full mt-1 left-0 right-0 max-h-[150px] overflow-y-auto overflow-x-hidden bg-zinc-800 border border-zinc-700 rounded-md shadow-2xl z-50">
                   {filteredItems.length > 0 ? (
                     filteredItems.map(item => (
                       <div 
@@ -202,8 +204,9 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
                       Barang tidak ditemukan.
                     </div>
                   )}
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="space-y-2 pt-2">

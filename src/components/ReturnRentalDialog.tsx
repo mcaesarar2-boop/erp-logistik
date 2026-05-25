@@ -5,22 +5,20 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { addBulkRental } from "@/app/actions"
+import { returnBulkRental } from "@/app/actions"
 import { supabase } from "@/lib/supabase"
-import { Trash2, Search, ShoppingCart } from "lucide-react"
+import { Trash2, Search, Undo2 } from "lucide-react"
 
-interface AddRentalDialogProps {
+interface ReturnRentalDialogProps {
   items: {
     id: string
     name: string
     code: string
-    quantity: number
-    price?: number | null
-    rentPercentage?: number | null
+    rentedQuantity: number
   }[]
 }
 
-export function AddRentalDialog({ items }: AddRentalDialogProps) {
+export function ReturnRentalDialog({ items }: ReturnRentalDialogProps) {
   const [open, setOpen] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   
@@ -36,33 +34,42 @@ export function AddRentalDialog({ items }: AddRentalDialogProps) {
     })
   }, [])
 
-  const filteredItems = items.filter(item => 
+  // Hanya tampilkan barang yang sedang disewakan
+  const rentedItems = items.filter(i => i.rentedQuantity > 0)
+
+  const filteredItems = rentedItems.filter(item => 
     item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     item.code.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
   const addToCart = (item: any) => {
-    if (item.quantity <= 0) return
+    if (item.rentedQuantity <= 0) return
     if (!cart.find(c => c.id === item.id)) {
-      setCart([...cart, { ...item, qty: 1 }])
+      setCart([...cart, { ...item, qty: item.rentedQuantity }]) // Default kembalikan semua
     }
     setSearchQuery("")
     setShowResults(false)
   }
 
+  const addAllToCart = () => {
+    setCart(rentedItems.map(item => ({ ...item, qty: item.rentedQuantity })))
+    setSearchQuery("")
+    setShowResults(false)
+  }
+
   const updateQty = (id: string, newQty: number) => {
-    setCart(cart.map(c => c.id === id ? { ...c, qty: Math.min(Math.max(1, newQty), c.quantity) } : c))
+    setCart(cart.map(c => c.id === id ? { ...c, qty: Math.min(Math.max(1, newQty), c.rentedQuantity) } : c))
   }
 
   async function handleSubmit(formData: FormData) {
     setErrorMsg(null)
     if (cart.length === 0) {
-      setErrorMsg("Belum ada barang yang dipilih.")
+      setErrorMsg("Belum ada barang yang dipilih untuk dikembalikan.")
       return
     }
     
     formData.append("payload", JSON.stringify(cart.map(c => ({ id: c.id, qty: c.qty }))))
-    const result = await addBulkRental(formData)
+    const result = await returnBulkRental(formData)
     
     if (result?.success === false) {
       setErrorMsg(result.error ?? "Terjadi kesalahan sistem.")
@@ -72,20 +79,21 @@ export function AddRentalDialog({ items }: AddRentalDialogProps) {
     setCart([]) // Reset state
   }
 
-  const grandTotal = cart.reduce((acc, item) => acc + (item.qty * ((item.price || 0) * (item.rentPercentage || 0) / 100)), 0)
-
   if (!isAdmin) return null;
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) { setErrorMsg(null); setCart([]); }}}>
       <DialogTrigger asChild>
-        <Button className="w-full sm:w-auto shrink-0 bg-emerald-950/50 border border-emerald-900 text-emerald-400 hover:bg-emerald-900 hover:text-emerald-50">
-          <ShoppingCart className="w-4 h-4 mr-2" /> Tambah Rental
-        </Button>
+        <button className="w-full sm:w-auto bg-blue-950/50 hover:bg-blue-900 text-blue-400 px-3 py-1.5 rounded-md transition-colors border border-blue-900 flex items-center justify-center shrink-0 text-sm font-medium gap-2 shadow-sm">
+          <Undo2 className="w-4 h-4" />
+          <span className="inline">Kembalikan Aset</span>
+        </button>
       </DialogTrigger>
       <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-50 flex flex-col max-h-[90vh] overflow-hidden">
         <DialogHeader>
-          <DialogTitle>Form Penyewaan Barang Masal</DialogTitle>
+          <DialogTitle className="flex items-center gap-2 text-blue-400">
+            <Undo2 className="w-5 h-5" /> Form Pengembalian Aset (Rental)
+          </DialogTitle>
         </DialogHeader>
         {errorMsg && (
           <div className="bg-red-950/50 border border-red-900 text-red-400 text-sm p-3 rounded-md flex items-center gap-2">
@@ -95,27 +103,49 @@ export function AddRentalDialog({ items }: AddRentalDialogProps) {
 
         <form action={handleSubmit} className="flex flex-col gap-4 pt-2 flex-1 overflow-hidden">
           <div className="space-y-2 shrink-0">
-            <Label>Cari Aset Tersedia</Label>
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-0">
+              <Label>Cari Aset yang Sedang Disewa</Label>
+              {rentedItems.length > 0 && (
+                <button 
+                  type="button" 
+                  onClick={addAllToCart}
+                  className="text-[10px] sm:text-xs bg-blue-950/50 hover:bg-blue-900 text-blue-400 px-2 py-1 rounded border border-blue-900 transition-colors font-medium self-start sm:self-auto"
+                >
+                  Pilih Semua Sekaligus
+                </button>
+              )}
+            </div>
             <div className="relative z-50">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
-              <Input placeholder="Ketik nama atau kode aset..." className="pl-9 bg-zinc-900 border-zinc-800" value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setShowResults(true) }} onFocus={() => setShowResults(true)} />
+              <Input placeholder="Ketik nama atau kode aset..." className="pl-9 bg-zinc-900 border-zinc-800 focus:ring-blue-500" value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setShowResults(true) }} onFocus={() => setShowResults(true)} />
               {showResults && searchQuery && (
                 <div className="absolute top-full mt-1 left-0 right-0 max-h-[150px] overflow-y-auto overflow-x-hidden bg-zinc-800 border border-zinc-700 rounded-md shadow-2xl z-50">
-                {filteredItems.filter(i => i.quantity > 0).length > 0 ? (
-                  filteredItems.filter(i => i.quantity > 0).map(item => (
+                {filteredItems.length > 0 ? (
+                  filteredItems.map(item => (
                     <div key={item.id} className="p-3 hover:bg-zinc-700 cursor-pointer border-b border-zinc-700/50 flex justify-between items-center" onClick={() => addToCart(item)}>
                       <div><p className="text-sm font-bold text-zinc-200">{item.name}</p><p className="text-xs text-zinc-400">{item.code}</p></div>
-                      <p className="text-xs font-medium text-emerald-400">Tersedia: {item.quantity}</p>
+                      <p className="text-xs font-medium text-amber-400">Sedang Keluar: {item.rentedQuantity}</p>
                     </div>
                   ))
-                ) : (<div className="p-3 text-sm text-zinc-500 text-center">Aset tidak ditemukan / stok kosong.</div>)}
+                ) : (<div className="p-3 text-sm text-zinc-500 text-center">Aset tidak ditemukan / tidak sedang disewa.</div>)}
                 </div>
               )}
             </div>
           </div>
 
           <div className="flex flex-col gap-2 pt-2 flex-1 overflow-hidden">
-            <Label className="shrink-0">Daftar Barang Disewa</Label>
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-0">
+              <Label>Daftar Aset yang Dikembalikan (Masuk Gudang)</Label>
+              {cart.length > 0 && (
+                <button 
+                  type="button" 
+                  onClick={() => setCart([])}
+                  className="text-[10px] sm:text-xs text-red-400 hover:text-red-300 transition-colors font-medium self-start sm:self-auto"
+                >
+                  Kosongkan Daftar
+                </button>
+              )}
+            </div>
             {cart.length === 0 ? (
               <div className="p-6 border border-dashed border-zinc-800 rounded-lg text-center text-zinc-500 text-sm shrink-0">Belum ada barang yang dipilih.</div>
             ) : (
@@ -123,17 +153,16 @@ export function AddRentalDialog({ items }: AddRentalDialogProps) {
                 {cart.map(item => (
                   <div key={item.id} className="bg-zinc-900 p-3 rounded-lg border border-zinc-800 flex flex-col gap-2">
                     <div className="flex justify-between items-start">
-                      <div><p className="text-sm font-bold text-zinc-100">{item.name}</p><p className="text-xs text-zinc-500">{item.code} | Max: {item.quantity} Unit</p></div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-zinc-100 truncate">{item.name}</p>
+                        <p className="text-xs text-zinc-500">{item.code} | Sedang Keluar: {item.rentedQuantity} Unit</p>
+                      </div>
                       <button type="button" onClick={() => setCart(cart.filter(c => c.id !== item.id))} className="text-zinc-500 hover:text-red-400 p-1 bg-zinc-800 rounded shrink-0"><Trash2 className="w-4 h-4"/></button>
                     </div>
                     <div className="flex items-center justify-between mt-1 pt-2 border-t border-zinc-800/50">
-                      <div className="flex items-center gap-2">
-                        <Label className="text-xs">Qty:</Label>
-                        <Input type="number" min="1" max={item.quantity} value={item.qty} onChange={(e) => updateQty(item.id, parseInt(e.target.value)||1)} className="w-20 h-7 text-xs bg-zinc-950 border-zinc-700" />
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[10px] text-zinc-500">Nilai Sewa per Item</p>
-                        <p className="text-sm font-bold text-emerald-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.qty * ((item.price || 0) * (item.rentPercentage || 0) / 100))}</p>
+                      <div className="flex items-center gap-2 bg-zinc-950 px-2 py-1 rounded-md border border-zinc-700">
+                        <Label className="text-xs text-zinc-400">Kembali:</Label>
+                        <Input type="number" min="1" max={item.rentedQuantity} value={item.qty} onChange={(e) => updateQty(item.id, parseInt(e.target.value)||1)} className="w-20 h-7 text-xs bg-transparent border-none p-0 text-center focus-visible:ring-0" />
                       </div>
                     </div>
                   </div>
@@ -141,12 +170,7 @@ export function AddRentalDialog({ items }: AddRentalDialogProps) {
               </div>
             )}
           </div>
-          {cart.length > 0 && (
-            <div className="mt-2 p-4 bg-zinc-950 border border-zinc-800 rounded-lg flex justify-between items-center shrink-0">
-              <span className="text-sm text-zinc-400">Total Tagihan Sewa:</span><span className="text-lg font-bold text-emerald-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(grandTotal)}</span>
-            </div>
-          )}
-          <Button type="submit" disabled={cart.length === 0} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 mt-2">Proses Sewa (Rental)</Button>
+          <Button type="submit" disabled={cart.length === 0} className="w-full bg-blue-600 hover:bg-blue-700 text-white shrink-0 mt-2">Konfirmasi</Button>
         </form>
       </DialogContent>
     </Dialog>

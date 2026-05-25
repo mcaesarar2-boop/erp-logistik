@@ -129,7 +129,7 @@ export default function ProfilePage() {
         <div className="md:col-span-2 space-y-6 bg-zinc-900/40 p-6 rounded-xl border border-zinc-800">
           <h2 className="text-lg font-bold text-zinc-100 border-b border-zinc-800 pb-3">Data Pribadi</h2>
           
-          <div className="flex items-center gap-6">
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6">
             <div className="relative group">
               <div className="h-24 w-24 rounded-full overflow-hidden bg-zinc-800 border-2 border-zinc-700 flex items-center justify-center">
                 {uploadingImage ? (
@@ -156,7 +156,7 @@ export default function ProfilePage() {
                 onClick={(e) => { (e.target as HTMLInputElement).value = '' }} 
               />
             </div>
-            <div>
+            <div className="text-center sm:text-left">
               <p className="font-semibold text-zinc-100">Foto Profil</p>
               <p className="text-xs text-zinc-500 mt-1">Disarankan format kotak (1:1).<br/>Maksimal 2MB.</p>
             </div>
