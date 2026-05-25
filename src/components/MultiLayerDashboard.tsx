@@ -26,6 +26,8 @@ type Item = {
   categoryId: string;
   imageUrl?: string | null;
   category: Category;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
 };
 
 interface MultiLayerDashboardProps {
@@ -36,7 +38,7 @@ interface MultiLayerDashboardProps {
 export default function MultiLayerDashboard({ items, categories }: MultiLayerDashboardProps) {
   const [activeLayer, setActiveLayer] = useState<'home' | 'all_items' | 'rented' | 'maintenance'>('home');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
-  const [labelSearch, setLabelSearch] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>('name_asc');
 
   // CEK ADMIN CLIENT SIDE
@@ -60,9 +62,16 @@ export default function MultiLayerDashboard({ items, categories }: MultiLayerDas
     }
   }, [categories, selectedCategory, currentCategoryObj]);
 
-  const filteredItems = selectedCategory === 'ALL'
-    ? items
-    : items.filter(item => item.categoryId === selectedCategory);
+  // --- LOGIKA PENCARIAN SUPER CERDAS ---
+  // Memfilter berdasarkan Label (Select Dropdown) DAN Teks Pencarian (Barang/Kode/Label)
+  const filteredItems = items.filter(item => {
+    const matchCategory = selectedCategory === 'ALL' || item.categoryId === selectedCategory;
+    const matchSearch = searchQuery === '' || 
+      item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      item.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.category.name.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchCategory && matchSearch;
+  });
     
   // Filter berdasarkan Tab Layer yang aktif (kecuali Home)
   let itemsToDisplay = filteredItems;
@@ -74,6 +83,18 @@ export default function MultiLayerDashboard({ items, categories }: MultiLayerDas
     if (sortBy === 'name_asc') return a.name.localeCompare(b.name);
     if (sortBy === 'name_desc') return b.name.localeCompare(a.name);
     
+    if (sortBy === 'date_modified_desc') {
+      const dateA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+      const dateB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+      return dateB - dateA; // Terbaru di atas
+    }
+    
+    if (sortBy === 'date_modified_asc') {
+      const dateA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+      const dateB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+      return dateA - dateB; // Terlama di atas
+    }
+
     // Dapatkan nilai kuantitas yang relevan dengan tab yang sedang aktif
     const getQty = (item: Item) => {
       if (activeLayer === 'rented') return item.rentedQuantity;
@@ -163,10 +184,10 @@ export default function MultiLayerDashboard({ items, categories }: MultiLayerDas
               <Search className="w-4 h-4 text-zinc-500" />
               <input
                 type="text"
-                placeholder="Cari label..."
-                className="bg-transparent border-none outline-none text-sm text-zinc-100 placeholder:text-zinc-600 w-24 focus:w-36 transition-all"
-                value={labelSearch}
-                onChange={(e) => setLabelSearch(e.target.value)}
+                placeholder="Cari barang atau label..."
+                className="bg-transparent border-none outline-none text-sm text-zinc-100 placeholder:text-zinc-600 w-32 focus:w-48 transition-all"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
               />
               <div className="w-px h-4 bg-zinc-700 mx-1"></div>
               <select
@@ -176,9 +197,7 @@ export default function MultiLayerDashboard({ items, categories }: MultiLayerDas
                 onChange={(e) => setSelectedCategory(e.target.value)}
               >
                 <option value="ALL">-- Semua Label --</option>
-                {categories
-                  .filter(category => category.name.toLowerCase().includes(labelSearch.toLowerCase()))
-                  .map(category => (
+                {categories.map(category => (
                   <option key={category.id} value={category.id}>
                     {category.name}
                   </option>
@@ -197,6 +216,8 @@ export default function MultiLayerDashboard({ items, categories }: MultiLayerDas
                 <option value="name_desc">Abjad (Z-A)</option>
                 <option value="qty_highest">Terbanyak</option>
                 <option value="qty_lowest">Paling Sedikit</option>
+                <option value="date_modified_desc">Terbaru Diubah</option>
+                <option value="date_modified_asc">Terlama Diubah</option>
               </select>
 
               {isAdmin && <AddCategoryDialog />}
@@ -245,7 +266,15 @@ export default function MultiLayerDashboard({ items, categories }: MultiLayerDas
                   <div className="p-5 flex flex-col flex-1">
                     <h2 className="text-xl font-bold truncate text-zinc-100">{item.name}</h2>
                     <p className="text-sm font-mono text-zinc-500 mb-3">{item.code}</p>
-                    <p className="text-sm text-zinc-400 line-clamp-2 mb-6">{item.description || "Tidak ada deskripsi."}</p>
+                    <p className="text-sm text-zinc-400 line-clamp-2 mb-2">{item.description || "Tidak ada deskripsi."}</p>
+                    
+                    {item.createdAt ? (
+                      <p className="text-[11px] text-zinc-500 mb-4 font-medium">
+                        Ditambahkan: {new Date(item.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      </p>
+                    ) : (
+                      <div className="mb-4"></div>
+                    )}
                     
                     <div className="flex justify-between items-end border-t border-zinc-800/50 pt-4 mt-auto">
                       {isAdmin && (
