@@ -23,9 +23,8 @@ type Item = {
   rentedQuantity: number;
   maintenanceQuantity: number;
   status: string;
-  categoryId: string;
   imageUrl?: string | null;
-  category: Category;
+  categories: Category[];
   createdAt?: string | Date;
   updatedAt?: string | Date;
 };
@@ -65,11 +64,11 @@ export default function MultiLayerDashboard({ items, categories }: MultiLayerDas
   // --- LOGIKA PENCARIAN SUPER CERDAS ---
   // Memfilter berdasarkan Label (Select Dropdown) DAN Teks Pencarian (Barang/Kode/Label)
   const filteredItems = items.filter(item => {
-    const matchCategory = selectedCategory === 'ALL' || item.categoryId === selectedCategory;
+    const matchCategory = selectedCategory === 'ALL' || item.categories.some(c => c.id === selectedCategory);
     const matchSearch = searchQuery === '' || 
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
       item.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.category.name.toLowerCase().includes(searchQuery.toLowerCase());
+      item.categories.some(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()));
     return matchCategory && matchSearch;
   });
     
@@ -245,10 +244,12 @@ export default function MultiLayerDashboard({ items, categories }: MultiLayerDas
                         <span className="text-xs font-bold uppercase tracking-widest border border-zinc-800 px-3 py-1 rounded-full">No Image</span>
                       </div>
                     )}
-                    <div className="absolute top-3 left-3">
-                      <span className="inline-flex items-center rounded-md bg-zinc-950/80 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-300 ring-1 ring-inset ring-zinc-700/50 backdrop-blur-sm">
-                        {item.category.name}
-                      </span>
+                    <div className="absolute top-3 left-3 flex flex-wrap gap-1 max-w-[70%]">
+                      {item.categories?.map(cat => (
+                        <span key={cat.id} className="inline-flex items-center rounded-md bg-zinc-950/80 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-300 ring-1 ring-inset ring-zinc-700/50 backdrop-blur-sm">
+                          {cat.name}
+                        </span>
+                      ))}
                     </div>
                 <div className="absolute top-3 right-3 flex flex-col gap-1 items-end">
                   {item.quantity > 0 && (
@@ -279,7 +280,7 @@ export default function MultiLayerDashboard({ items, categories }: MultiLayerDas
                     <div className="flex justify-between items-end border-t border-zinc-800/50 pt-4 mt-auto">
                       {isAdmin && (
                         <div className="flex items-center gap-2">
-                          <EditItemDialog item={item} />
+                          <EditItemDialog item={item} allCategories={categories} />
                           <DeleteItemDialog item={item} />
                         </div>
                       )}

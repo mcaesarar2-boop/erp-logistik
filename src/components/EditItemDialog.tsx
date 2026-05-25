@@ -19,10 +19,12 @@ interface EditItemDialogProps {
     quantity: number
     rentedQuantity: number
     maintenanceQuantity: number
+    categories: { id: string; name: string }[]
   }
+  allCategories: { id: string; name: string }[]
 }
 
-export function EditItemDialog({ item }: EditItemDialogProps) {
+export function EditItemDialog({ item, allCategories }: EditItemDialogProps) {
   const [open, setOpen] = useState(false)
 
   const [available, setAvailable] = useState(item.quantity || 0)
@@ -130,6 +132,24 @@ export function EditItemDialog({ item }: EditItemDialogProps) {
           <div className="space-y-2">
             <Label>Kode Aset</Label>
             <Input name="code" defaultValue={item.code} className="bg-zinc-900 border-zinc-800" required />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Label / Kategori (Pilih minimal 1)</Label>
+            <div className="grid grid-cols-2 gap-2 mt-2 bg-zinc-900 p-3 rounded-md border border-zinc-800 max-h-32 overflow-y-auto">
+              {allCategories.map(cat => (
+                <label key={cat.id} className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    name="categories" 
+                    value={cat.id}
+                    defaultChecked={item.categories?.some(c => c.id === cat.id)}
+                    className="rounded border-zinc-700 bg-zinc-950 text-emerald-500 focus:ring-emerald-500" 
+                  />
+                  {cat.name}
+                </label>
+              ))}
+            </div>
           </div>
 
           <div className="space-y-3 border-y border-zinc-800 py-4 my-4">

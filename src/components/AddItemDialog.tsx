@@ -126,12 +126,20 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
             </div>
 
             <div className="space-y-2">
-              <Label>Kategori</Label>
-              <select name="category" className="flex h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400">
+              <Label>Label / Kategori (Pilih minimal 1)</Label>
+              <div className="grid grid-cols-2 gap-2 mt-2 bg-zinc-900 p-3 rounded-md border border-zinc-800 max-h-32 overflow-y-auto">
                 {categories.map(cat => (
-                  <option key={cat.id} value={cat.name}>{cat.name}</option>
+                  <label key={cat.id} className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      name="categories" 
+                      value={cat.id} 
+                      className="rounded border-zinc-700 bg-zinc-950 text-emerald-500 focus:ring-emerald-500" 
+                    />
+                    {cat.name}
+                  </label>
                 ))}
-              </select>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Deskripsi</Label>

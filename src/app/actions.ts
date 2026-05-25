@@ -71,16 +71,12 @@ export async function createItem(formData: FormData) {
     const description = formData.get("description") as string
     // Hindari NaN dengan fallback fallback ke 0
     const quantity = parseInt(formData.get("quantity") as string) || 0 
-    const categoryName = formData.get("category") as string
+    const categoryIds = formData.getAll("categories") as string[]
     
     const imageFile = formData.get("image") as File | null
     const imageUrl = await uploadImageToSupabase(imageFile) || null;
 
-    const category = await prisma.category.findUnique({
-      where: { name: categoryName }
-    })
-
-    if (!category) return { success: false, error: "Kategori tidak ditemukan." }
+    if (categoryIds.length === 0) return { success: false, error: "Pilih minimal 1 kategori/label." }
 
     // Simpan ke database jika lolos semua ujian
     await prisma.item.create({
@@ -89,7 +85,9 @@ export async function createItem(formData: FormData) {
         code,
         description,
         quantity,
-        categoryId: category.id,
+        categories: {
+          connect: categoryIds.map(id => ({ id }))
+        },
         status: "AVAILABLE",
         rentedQuantity: 0,
         maintenanceQuantity: 0,
@@ -123,6 +121,7 @@ export async function updateItem(id: string, formData: FormData) {
     const quantity = parseInt(formData.get("quantity") as string) || 0
     const rentedQuantity = parseInt(formData.get("rentedQuantity") as string) || 0
     const maintenanceQuantity = parseInt(formData.get("maintenanceQuantity") as string) || 0
+    const categoryIds = formData.getAll("categories") as string[]
 
     const imageFile = formData.get("image") as File | null
     // imageUrl akan menjadi undefined jika tidak ada file (maka Prisma akan mengabaikannya)
@@ -138,6 +137,9 @@ export async function updateItem(id: string, formData: FormData) {
         quantity,
         rentedQuantity,
         maintenanceQuantity,
+        categories: {
+          set: categoryIds.map(id => ({ id }))
+        },
         
         //imageUrl akan diupdate hanya jika nilainya bukan 'undefined' (ada upload baru)
         ...(imageUrl && { imageUrl }) 
@@ -277,7 +279,7 @@ export async function deleteCategory(id: string) {
     await verifyAdmin();
 
     // Cek apakah ada barang yang menggunakan kategori ini
-    const itemsCount = await prisma.item.count({ where: { categoryId: id } });
+    const itemsCount = await prisma.item.count({ where: { categories: { some: { id } } } });
     if (itemsCount > 0) {
       return { success: false, error: `Gagal! Label ini masih digunakan oleh ${itemsCount} aset. Silakan pindahkan atau hapus aset terkait terlebih dahulu.` };
     }

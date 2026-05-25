@@ -12,7 +12,7 @@ model Category {
   id          String   @id @default(cuid())
   name        String   @unique
   description String?
-  items       Item[]   // Relasi: 1 Kategori punya banyak Barang
+  items       Item[]   // Relasi: Banyak Kategori punya banyak Barang (Many-to-Many)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -28,8 +28,7 @@ model Item {
   
   imageUrl    String?  // Kolom foto baru
   
-  categoryId  String
-  category    Category @relation(fields: [categoryId], references: [id])
+  categories  Category[] // Relasi Many-to-Many
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic"
 export default async function DashboardPage() {
   const items = await prisma.item.findMany({
     include: {
-      category: true
+      categories: true
     }
   })
 
