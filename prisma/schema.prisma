@@ -1,0 +1,40 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- TABEL KATEGORI BARANG ---
+model Category {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  items       Item[]   // Relasi: 1 Kategori punya banyak Barang
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// --- TABEL BARANG (ASET) ---
+model Item {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  quantity    Int      @default(0)
+  status      String   @default("AVAILABLE")
+  
+  imageUrl    String?  // Kolom foto baru
+  
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  rentedQuantity      Int      @default(0) // <--- TAMBAH INI
+  maintenanceQuantity Int      @default(0) // <--- TAMBAH INI
+
+}

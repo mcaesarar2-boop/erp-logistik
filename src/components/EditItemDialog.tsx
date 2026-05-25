@@ -1,0 +1,170 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { updateItem } from "@/app/actions"
+
+// Definisikan tipe data item yang diterima komponen (tambahkan imageUrl)
+interface EditItemDialogProps {
+  item: {
+    id: string
+    name: string
+    code: string
+    description: string | null
+    imageUrl: string | null // <--- TAMBAHKAN INI
+    status: string
+    quantity: number
+    rentedQuantity: number
+    maintenanceQuantity: number
+  }
+}
+
+export function EditItemDialog({ item }: EditItemDialogProps) {
+  const [open, setOpen] = useState(false)
+
+  const [available, setAvailable] = useState(item.quantity || 0)
+  const [rented, setRented] = useState(item.rentedQuantity || 0)
+  const [maintenance, setMaintenance] = useState(item.maintenanceQuantity || 0)
+
+  const totalStockOriginal = (item.quantity || 0) + (item.rentedQuantity || 0) + (item.maintenanceQuantity || 0)
+
+  // --- LOGIKA AUTOMISASI DISTRIBUSI STOK ---
+  const handleAvailableChange = (val: number) => {
+    if (val < 0) val = 0;
+    if (val > totalStockOriginal) val = totalStockOriginal;
+    
+    const excess = totalStockOriginal - val - maintenance;
+    if (excess >= 0) {
+      setRented(excess);
+      setAvailable(totalStockOriginal - excess - maintenance);
+    } else {
+      setRented(0);
+      setMaintenance(totalStockOriginal - val);
+      setAvailable(val);
+    }
+  }
+
+  const handleRentedChange = (val: number) => {
+    if (val < 0) val = 0;
+    if (val + maintenance > totalStockOriginal) {
+      val = totalStockOriginal - maintenance;
+    }
+    setRented(val);
+    setAvailable(totalStockOriginal - val - maintenance);
+  }
+
+  const handleMaintenanceChange = (val: number) => {
+    if (val < 0) val = 0;
+    if (val + rented > totalStockOriginal) {
+      val = totalStockOriginal - rented;
+    }
+    setMaintenance(val);
+    setAvailable(totalStockOriginal - rented - val);
+  }
+
+  // Reset form saat dialog dibuka
+  useEffect(() => {
+    if (open) {
+      setAvailable(item.quantity || 0)
+      setRented(item.rentedQuantity || 0)
+      setMaintenance(item.maintenanceQuantity || 0)
+    }
+  }, [open, item])
+
+  async function handleSubmit(formData: FormData) {
+    formData.append("quantity", available.toString());
+    formData.append("rentedQuantity", rented.toString());
+    formData.append("maintenanceQuantity", maintenance.toString());
+    // Jalankan server action dengan mengikat ID item terkait
+    await updateItem(item.id, formData)
+    setOpen(false) 
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="border-zinc-800 text-zinc-400 hover:text-zinc-50 hover:bg-zinc-900 text-xs h-7 px-3">
+          Edit Aset
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-50 overflow-y-auto max-h-[90vh]">
+        <DialogHeader>
+          <DialogTitle>Ubah Informasi Aset</DialogTitle>
+        </DialogHeader>
+        
+        <form action={handleSubmit} className="space-y-4 pt-4">
+          
+          {/* --- BAGIAN FOTO (Paling Atas agar terlihat jelas) --- */}
+          <div className="space-y-2 border-b border-zinc-800 pb-4 mb-4">
+            <Label>Foto Aset Saat Ini</Label>
+            <div className="flex items-center gap-4 mt-2">
+              <div className="h-20 w-20 rounded-md border border-zinc-800 bg-zinc-900 flex items-center justify-center overflow-hidden">
+                {item.imageUrl ? (
+                  <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
+                ) : (
+                  <span className="text-[10px] text-zinc-600 font-bold uppercase">No Image</span>
+                )}
+              </div>
+              <div className="flex-1 space-y-1.5">
+                <Label htmlFor="edit-image" className="text-xs text-zinc-400">Ganti Foto (Opsional)</Label>
+                <Input 
+                    id="edit-image"
+                    name="image" 
+                    type="file" 
+                    accept="image/*" 
+                    className="bg-zinc-900 border-zinc-800 text-zinc-400 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-zinc-800 file:text-zinc-300 hover:file:bg-zinc-700 cursor-pointer text-xs h-9" 
+                />
+              </div>
+            </div>
+          </div>
+          {/* ----------------------------------------------------- */}
+
+          <div className="space-y-2">
+            <Label>Nama Barang</Label>
+            <Input name="name" defaultValue={item.name} className="bg-zinc-900 border-zinc-800" required />
+          </div>
+          
+          <div className="space-y-2">
+            <Label>Kode Aset</Label>
+            <Input name="code" defaultValue={item.code} className="bg-zinc-900 border-zinc-800" required />
+          </div>
+
+          <div className="space-y-3 border-y border-zinc-800 py-4 my-4">
+            <Label className="text-zinc-300 font-bold">Distribusi Stok (Total: {totalStockOriginal} Unit)</Label>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-1">
+                <Label className="text-xs text-emerald-400">🟢 Tersedia</Label>
+                <Input type="number" min="0" max={totalStockOriginal} value={available} onChange={e => handleAvailableChange(parseInt(e.target.value)||0)} className="bg-emerald-950/20 border-emerald-900/50 text-emerald-400 font-bold" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-amber-400">🟡 Rented</Label>
+                <Input type="number" min="0" max={totalStockOriginal} value={rented} onChange={e => handleRentedChange(parseInt(e.target.value)||0)} className="bg-amber-950/20 border-amber-900/50 text-amber-400 font-bold" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-red-400">🔴 Maint.</Label>
+                <Input type="number" min="0" max={totalStockOriginal} value={maintenance} onChange={e => handleMaintenanceChange(parseInt(e.target.value)||0)} className="bg-red-950/20 border-red-900/50 text-red-400 font-bold" />
+              </div>
+            </div>
+          </div>
+          
+          <div className="space-y-2">
+            <Label>Deskripsi</Label>
+            <Input name="description" defaultValue={item.description || ""} className="bg-zinc-900 border-zinc-800" />
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-800">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)} className="w-full border-zinc-800 text-zinc-400 hover:bg-zinc-900">
+              Batal
+            </Button>
+            <Button type="submit" className="w-full bg-zinc-50 text-zinc-950 hover:bg-zinc-200">
+              Simpan Perubahan
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
