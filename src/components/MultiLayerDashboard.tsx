@@ -9,6 +9,7 @@ import { DeleteCategoryDialog } from "@/components/DeleteCategoryDialog";
 import { Search, ArrowUpDown } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { RentalInvoiceDialog } from "@/components/RentalInvoiceDialog";
 
 type Category = {
   id: string;
@@ -243,6 +244,14 @@ export default function MultiLayerDashboard({ items, categories }: MultiLayerDas
                 <>
                   <EditCategoryDialog category={currentCategoryObj} />
                   <DeleteCategoryDialog category={currentCategoryObj} />
+                </>
+              )}
+              
+              {/* Tombol Rincian Rental Khusus di Tab On Rented */}
+              {activeLayer === 'rented' && (
+                <>
+                  <div className="w-px h-4 bg-zinc-700 mx-1 hidden sm:block"></div>
+                  <RentalInvoiceDialog items={itemsToDisplay} />
                 </>
               )}
             </div>
