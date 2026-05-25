@@ -355,3 +355,49 @@ export async function addBulkMaintenance(formData: FormData) {
     return { success: false, error: error.message || "Gagal memproses pemeliharaan masal." };
   }
 }
+
+// --- FUNGSI RIWAYAT / TRANSAKSI ---
+export async function createHistory(formData: FormData) {
+  try {
+    await verifyAdmin();
+    const type = formData.get("type") as string;
+    const date = new Date(formData.get("date") as string);
+    const description = formData.get("description") as string;
+    const payload = formData.get("payload") as string;
+
+    await prisma.history.create({
+      data: { type, date, description, payload }
+    });
+    revalidatePath("/");
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: "Gagal menyimpan riwayat." };
+  }
+}
+
+export async function updateHistory(id: string, formData: FormData) {
+  try {
+    await verifyAdmin();
+    const date = new Date(formData.get("date") as string);
+    const description = formData.get("description") as string;
+    await prisma.history.update({
+      where: { id },
+      data: { date, description }
+    });
+    revalidatePath("/");
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: "Gagal memperbarui riwayat." };
+  }
+}
+
+export async function deleteHistory(id: string) {
+  try {
+    await verifyAdmin();
+    await prisma.history.delete({ where: { id } });
+    revalidatePath("/");
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: "Gagal menghapus riwayat." };
+  }
+}

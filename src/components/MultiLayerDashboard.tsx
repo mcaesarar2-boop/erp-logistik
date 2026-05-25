@@ -6,10 +6,11 @@ import { DeleteItemDialog } from "@/components/DeleteItemDialog";
 import { AddCategoryDialog } from "@/components/AddCategoryDialog";
 import { EditCategoryDialog } from "@/components/EditCategoryDialog";
 import { DeleteCategoryDialog } from "@/components/DeleteCategoryDialog";
-import { Search, ArrowUpDown } from "lucide-react";
+import { Search, ArrowUpDown, History as HistoryIcon, Calendar, Trash2, Pencil, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { RentalInvoiceDialog } from "@/components/RentalInvoiceDialog";
+import { updateHistory, deleteHistory } from "@/app/actions";
 
 type Category = {
   id: string;
@@ -33,17 +34,32 @@ type Item = {
   updatedAt?: string | Date;
 };
 
+type History = {
+  id: string;
+  type: string;
+  date: Date | string;
+  description: string | null;
+  payload: string | null;
+  createdAt: Date | string;
+};
+
 interface MultiLayerDashboardProps {
   items: Item[];
   categories: Category[];
+  histories: History[];
 }
 
-export default function MultiLayerDashboard({ items, categories }: MultiLayerDashboardProps) {
-  const [activeLayer, setActiveLayer] = useState<'home' | 'all_items' | 'rented' | 'maintenance'>('home');
+export default function MultiLayerDashboard({ items, categories, histories }: MultiLayerDashboardProps) {
+  const [activeLayer, setActiveLayer] = useState<'home' | 'all_items' | 'rented' | 'maintenance' | 'history'>('home');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>('name_asc');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+
+  // State untuk Fitur Edit & Delete History
+  const [editingHistory, setEditingHistory] = useState<History | null>(null);
+  const [deletingHistory, setDeletingHistory] = useState<History | null>(null);
+  const [isHistoryActionLoading, setIsHistoryActionLoading] = useState(false);
 
   // CEK ADMIN CLIENT SIDE
   const [isAdmin, setIsAdmin] = useState(false)
@@ -130,7 +146,27 @@ export default function MultiLayerDashboard({ items, categories }: MultiLayerDas
     { id: 'all_items', label: 'All Items' },
     { id: 'rented', label: 'On Rented' },
     { id: 'maintenance', label: 'Maintenance' },
+    { id: 'history', label: 'Riwayat Transaksi' },
   ] as const;
+
+  // FUNGSI AKSI HISTORY
+  const handleUpdateHistory = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editingHistory) return;
+    setIsHistoryActionLoading(true);
+    const formData = new FormData(e.currentTarget);
+    await updateHistory(editingHistory.id, formData);
+    setIsHistoryActionLoading(false);
+    setEditingHistory(null);
+  }
+
+  const handleDeleteHistory = async () => {
+    if (!deletingHistory) return;
+    setIsHistoryActionLoading(true);
+    await deleteHistory(deletingHistory.id);
+    setIsHistoryActionLoading(false);
+    setDeletingHistory(null);
+  }
 
   return (
     <div className="w-full">
@@ -186,8 +222,65 @@ export default function MultiLayerDashboard({ items, categories }: MultiLayerDas
         </div>
       )}
 
-      {/* Layer 2: Data Barang (All, Rented, Maintenance) */}
-      {activeLayer !== 'home' && (
+      {/* Layer 2.5: Riwayat Transaksi */}
+      {activeLayer === 'history' && (
+        <div className="space-y-6">
+          <div className="flex items-center gap-3 border-b border-zinc-800 pb-4">
+            <HistoryIcon className="w-6 h-6 text-zinc-400" />
+            <h2 className="text-xl font-bold text-zinc-100">Catatan Riwayat & Invoice</h2>
+          </div>
+
+          {histories.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {histories.map((hist) => {
+                const payloadData = hist.payload ? JSON.parse(hist.payload) : [];
+                const totalTagihan = payloadData.reduce((acc: number, cur: any) => acc + (cur.price * cur.qty), 0);
+
+                return (
+                  <div key={hist.id} className="bg-zinc-900/40 border border-zinc-800 rounded-xl p-5 shadow-sm relative group">
+                    <div className="flex justify-between items-start gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 text-sm text-zinc-400 mb-2">
+                          <Calendar className="w-4 h-4 text-emerald-500 shrink-0" />
+                          <span className="truncate">{new Date(hist.date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                        </div>
+                        <h3 className="text-base font-bold text-zinc-100 mb-1 line-clamp-2">{hist.description}</h3>
+                      </div>
+                      {isAdmin && (
+                        <div className="flex gap-2 shrink-0 md:opacity-0 opacity-100 group-hover:opacity-100 transition-opacity z-10">
+                          <button onClick={() => setEditingHistory(hist)} className="p-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-md transition-colors shadow-sm"><Pencil className="w-4 h-4" /></button>
+                          <button onClick={() => setDeletingHistory(hist)} className="p-2 bg-red-950/50 hover:bg-red-900 text-red-400 rounded-md transition-colors shadow-sm"><Trash2 className="w-4 h-4" /></button>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="mt-4 bg-zinc-950/50 rounded-lg p-3 border border-zinc-800/50 max-h-32 overflow-y-auto">
+                      {payloadData.map((d: any, idx: number) => (
+                        <div key={idx} className="flex justify-between items-center text-xs py-1 border-b border-zinc-800/50 last:border-0">
+                          <span className="text-zinc-300 truncate max-w-[60%]">{d.name} <span className="text-zinc-600">({d.code})</span></span>
+                          <span className="font-bold text-emerald-400">{d.qty} Unit x {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(d.price)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    <div className="mt-4 pt-3 border-t border-zinc-800 flex justify-between items-center">
+                      <span className="text-xs text-zinc-500">Tercatat: {new Date(hist.createdAt).toLocaleTimeString('id-ID')}</span>
+                      <span className="text-sm font-bold text-zinc-100">Total: <span className="text-emerald-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(totalTagihan)}</span></span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-16 text-zinc-500 bg-zinc-900/20 rounded-xl border border-zinc-800">
+              Belum ada catatan riwayat transaksi.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Layer 3: Data Barang (All, Rented, Maintenance) */}
+      {activeLayer !== 'home' && activeLayer !== 'history' && (
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <h2 className="text-xl font-bold text-zinc-100">
@@ -373,6 +466,40 @@ export default function MultiLayerDashboard({ items, categories }: MultiLayerDas
           )}
         </DialogContent>
       </Dialog>
+
+      {/* KOTAK POPUP EDIT & DELETE HISTORY (INLINE UNTUK PERFORMA CEPAT) */}
+      <Dialog open={!!editingHistory} onOpenChange={(open) => !open && setEditingHistory(null)}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-50">
+          <DialogTitle>Ubah Riwayat Transaksi</DialogTitle>
+          <form onSubmit={handleUpdateHistory} className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-zinc-400">Tanggal Faktur</label>
+              <input type="date" name="date" defaultValue={editingHistory?.date ? new Date(editingHistory.date).toISOString().split('T')[0] : ''} className="w-full h-10 rounded-md bg-zinc-900 border border-zinc-800 px-3 text-sm text-zinc-100" required />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-zinc-400">Catatan / Deskripsi</label>
+              <input type="text" name="description" defaultValue={editingHistory?.description || ''} className="w-full h-10 rounded-md bg-zinc-900 border border-zinc-800 px-3 text-sm text-zinc-100" required />
+            </div>
+            <button type="submit" disabled={isHistoryActionLoading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-10 rounded-md font-medium flex justify-center items-center gap-2">
+              {isHistoryActionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan Perubahan"}
+            </button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deletingHistory} onOpenChange={(open) => !open && setDeletingHistory(null)}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-50">
+          <DialogTitle className="text-red-400">Hapus Riwayat Transaksi?</DialogTitle>
+          <p className="text-sm text-zinc-400 mt-2">Apakah Anda yakin ingin menghapus catatan riwayat faktur <strong>"{deletingHistory?.description}"</strong>? (Data barang di gudang tidak akan berubah, hanya menghilangkan catatannya saja).</p>
+          <div className="grid grid-cols-2 gap-4 mt-6">
+            <button onClick={() => setDeletingHistory(null)} className="h-10 border border-zinc-800 text-zinc-400 hover:bg-zinc-900 rounded-md">Batal</button>
+            <button onClick={handleDeleteHistory} disabled={isHistoryActionLoading} className="h-10 bg-red-600 hover:bg-red-700 text-white rounded-md flex justify-center items-center">
+              {isHistoryActionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Ya, Hapus"}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }

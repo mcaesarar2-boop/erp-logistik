@@ -39,3 +39,14 @@ model Item {
   rentPercentage      Float?   @default(0) // <--- NILAI PERSENTASE SEWA
 
 }
+
+// --- TABEL RIWAYAT TRANSAKSI / INVOICE ---
+model History {
+  id          String   @id @default(cuid())
+  type        String   // Misal: "INVOICE_RENTAL"
+  date        DateTime @default(now())
+  description String?
+  payload     String?  @db.Text // Menyimpan snapshot barang yang dirental format JSON
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
