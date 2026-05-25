@@ -6,7 +6,7 @@ import { DeleteItemDialog } from "@/components/DeleteItemDialog";
 import { AddCategoryDialog } from "@/components/AddCategoryDialog";
 import { EditCategoryDialog } from "@/components/EditCategoryDialog";
 import { DeleteCategoryDialog } from "@/components/DeleteCategoryDialog";
-import { Search } from "lucide-react";
+import { Search, ArrowUpDown } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 type Category = {
@@ -37,6 +37,7 @@ export default function MultiLayerDashboard({ items, categories }: MultiLayerDas
   const [activeLayer, setActiveLayer] = useState<'home' | 'all_items' | 'rented' | 'maintenance'>('home');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [labelSearch, setLabelSearch] = useState<string>('');
+  const [sortBy, setSortBy] = useState<string>('name_asc');
 
   // CEK ADMIN CLIENT SIDE
   const [isAdmin, setIsAdmin] = useState(false)
@@ -67,6 +68,27 @@ export default function MultiLayerDashboard({ items, categories }: MultiLayerDas
   let itemsToDisplay = filteredItems;
   if (activeLayer === 'rented') itemsToDisplay = filteredItems.filter(i => i.rentedQuantity > 0);
   if (activeLayer === 'maintenance') itemsToDisplay = filteredItems.filter(i => i.maintenanceQuantity > 0);
+
+  // --- LOGIKA PENGURUTAN (SORTING) ---
+  itemsToDisplay = [...itemsToDisplay].sort((a, b) => {
+    if (sortBy === 'name_asc') return a.name.localeCompare(b.name);
+    if (sortBy === 'name_desc') return b.name.localeCompare(a.name);
+    
+    // Dapatkan nilai kuantitas yang relevan dengan tab yang sedang aktif
+    const getQty = (item: Item) => {
+      if (activeLayer === 'rented') return item.rentedQuantity;
+      if (activeLayer === 'maintenance') return item.maintenanceQuantity;
+      return item.quantity + item.rentedQuantity + item.maintenanceQuantity;
+    };
+    
+    const qtyA = getQty(a);
+    const qtyB = getQty(b);
+    
+    if (sortBy === 'qty_highest') return qtyB - qtyA;
+    if (sortBy === 'qty_lowest') return qtyA - qtyB;
+    
+    return 0;
+  });
 
   const totalItems = items.length;
   const availableUnits = items.reduce((acc, item) => acc + item.quantity, 0);
@@ -137,7 +159,7 @@ export default function MultiLayerDashboard({ items, categories }: MultiLayerDas
             </h2>
             
             {/* Fitur Filter Kategori */}
-            <div className="flex items-center gap-3 bg-zinc-900/50 p-2 px-3 rounded-lg border border-zinc-800 shadow-sm">
+            <div className="flex items-center gap-3 bg-zinc-900/50 p-2 px-3 rounded-lg border border-zinc-800 shadow-sm flex-wrap">
               <Search className="w-4 h-4 text-zinc-500" />
               <input
                 type="text"
@@ -163,6 +185,20 @@ export default function MultiLayerDashboard({ items, categories }: MultiLayerDas
                 ))}
               </select>
               
+              <div className="w-px h-4 bg-zinc-700 mx-1"></div>
+              
+              <ArrowUpDown className="w-4 h-4 text-zinc-500 hidden sm:block" />
+              <select
+                className="bg-zinc-950 text-zinc-100 text-sm border border-zinc-700 rounded-md outline-none focus:ring-1 focus:ring-zinc-500 cursor-pointer p-1.5"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+              >
+                <option value="name_asc">Abjad (A-Z)</option>
+                <option value="name_desc">Abjad (Z-A)</option>
+                <option value="qty_highest">Terbanyak</option>
+                <option value="qty_lowest">Paling Sedikit</option>
+              </select>
+
               {isAdmin && <AddCategoryDialog />}
               
               {/* Tombol Aksi Kategori hanya muncul jika filter bukan 'ALL' */}
