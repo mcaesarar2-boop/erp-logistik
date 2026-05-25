@@ -72,6 +72,7 @@ export async function createItem(formData: FormData) {
     // Hindari NaN dengan fallback fallback ke 0
     const quantity = parseInt(formData.get("quantity") as string) || 0 
     const price = parseInt(formData.get("price") as string) || 0
+    const rentPercentage = parseFloat(formData.get("rentPercentage") as string) || 0
     const categoryIds = formData.getAll("categories") as string[]
     
     const imageFile = formData.get("image") as File | null
@@ -87,6 +88,7 @@ export async function createItem(formData: FormData) {
         description,
         quantity,
         price,
+        rentPercentage,
         categories: {
           connect: categoryIds.map(id => ({ id }))
         },
@@ -124,6 +126,7 @@ export async function updateItem(id: string, formData: FormData) {
     const rentedQuantity = parseInt(formData.get("rentedQuantity") as string) || 0
     const maintenanceQuantity = parseInt(formData.get("maintenanceQuantity") as string) || 0
     const price = parseInt(formData.get("price") as string) || 0
+    const rentPercentage = parseFloat(formData.get("rentPercentage") as string) || 0
     const categoryIds = formData.getAll("categories") as string[]
 
     const imageFile = formData.get("image") as File | null
@@ -141,6 +144,7 @@ export async function updateItem(id: string, formData: FormData) {
         rentedQuantity,
         maintenanceQuantity,
         price,
+        rentPercentage,
         categories: {
           set: categoryIds.map(id => ({ id }))
         },
@@ -293,5 +297,61 @@ export async function deleteCategory(id: string) {
   } catch (error: any) {
     console.error("Delete Category Error:", error);
     return { success: false, error: "Gagal menghapus label." };
+  }
+}
+
+// --- FUNGSI TAMBAH RENTAL MASAL ---
+export async function addBulkRental(formData: FormData) {
+  try {
+    await verifyAdmin();
+    const payloadStr = formData.get("payload") as string;
+    if (!payloadStr) return { success: false, error: "Data kosong." };
+    
+    const payload = JSON.parse(payloadStr) as { id: string; qty: number }[];
+    
+    // Gunakan transaksi (transaction) agar database update sekaligus
+    await prisma.$transaction(async (tx) => {
+      for (const item of payload) {
+        const dbItem = await tx.item.findUnique({ where: { id: item.id } });
+        if (!dbItem) throw new Error(`Barang dengan ID ${item.id} tidak ditemukan.`);
+        if (dbItem.quantity < item.qty) throw new Error(`Stok tersedia untuk ${dbItem.name} tidak mencukupi.`);
+        
+        await tx.item.update({
+          where: { id: item.id },
+          data: { quantity: dbItem.quantity - item.qty, rentedQuantity: dbItem.rentedQuantity + item.qty }
+        });
+      }
+    });
+    revalidatePath("/");
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message || "Gagal memproses rental masal." };
+  }
+}
+
+// --- FUNGSI TAMBAH PEMELIHARAAN MASAL ---
+export async function addBulkMaintenance(formData: FormData) {
+  try {
+    await verifyAdmin();
+    const payloadStr = formData.get("payload") as string;
+    if (!payloadStr) return { success: false, error: "Data kosong." };
+    
+    const payload = JSON.parse(payloadStr) as { id: string; qty: number }[];
+    await prisma.$transaction(async (tx) => {
+      for (const item of payload) {
+        const dbItem = await tx.item.findUnique({ where: { id: item.id } });
+        if (!dbItem) throw new Error(`Barang dengan ID ${item.id} tidak ditemukan.`);
+        if (dbItem.quantity < item.qty) throw new Error(`Stok tersedia untuk ${dbItem.name} tidak mencukupi.`);
+        
+        await tx.item.update({
+          where: { id: item.id },
+          data: { quantity: dbItem.quantity - item.qty, maintenanceQuantity: dbItem.maintenanceQuantity + item.qty }
+        });
+      }
+    });
+    revalidatePath("/");
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message || "Gagal memproses pemeliharaan masal." };
   }
 }

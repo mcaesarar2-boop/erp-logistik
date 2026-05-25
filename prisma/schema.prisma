@@ -36,5 +36,6 @@ model Item {
   rentedQuantity      Int      @default(0) // <--- TAMBAH INI
   maintenanceQuantity Int      @default(0) // <--- TAMBAH INI
   price               Int?     @default(0) // <--- TAMBAH INI
+  rentPercentage      Float?   @default(0) // <--- NILAI PERSENTASE SEWA
 
 }

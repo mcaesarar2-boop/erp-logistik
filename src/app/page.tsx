@@ -1,6 +1,8 @@
 import prisma from "@/lib/prisma"
 import MultiLayerDashboard from "@/components/MultiLayerDashboard"
 import { AddItemDialog } from "@/components/AddItemDialog"
+import { AddRentalDialog } from "@/components/AddRentalDialog"
+import { AddMaintenanceDialog } from "@/components/AddMaintenanceDialog"
 import { supabase } from "@/lib/supabase"
 
 export const dynamic = "force-dynamic"
@@ -21,7 +23,11 @@ export default async function DashboardPage() {
           <h1 className="text-2xl font-bold text-zinc-100">Dashboard Inventaris</h1>
           <p className="text-sm text-zinc-400">Kelola ketersediaan barang logistik Anda.</p>
         </div>
-        <AddItemDialog items={items} categories={categories} />
+        <div className="flex flex-wrap items-center gap-2">
+          <AddRentalDialog items={items} />
+          <AddMaintenanceDialog items={items} />
+          <AddItemDialog items={items} categories={categories} />
+        </div>
       </div>
       
       <MultiLayerDashboard items={items} categories={categories} />

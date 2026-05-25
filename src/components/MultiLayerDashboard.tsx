@@ -27,6 +27,7 @@ type Item = {
   imageUrl?: string | null;
   categories: Category[];
   price?: number | null;
+  rentPercentage?: number | null;
   createdAt?: string | Date;
   updatedAt?: string | Date;
 };
@@ -299,10 +300,25 @@ export default function MultiLayerDashboard({ items, categories }: MultiLayerDas
                     )}
                     
                     <div className="bg-zinc-950/50 rounded-lg p-3 mb-4 border border-zinc-800/50">
-                      <p className="text-xs text-zinc-500 mb-1">Valuasi Item (Total Unit x Harga)</p>
-                      <p className="text-sm font-bold text-blue-400">
-                        {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format((item.quantity + item.rentedQuantity + item.maintenanceQuantity) * (item.price || 0))}
-                      </p>
+                      <p className="text-xs font-semibold text-zinc-400 border-b border-zinc-800/50 pb-1 mb-2">Valuasi Item</p>
+                      <div className="flex justify-between items-center mb-1">
+                        <p className="text-[11px] text-zinc-500">Harga Satuan</p>
+                        <p className="text-xs font-medium text-zinc-300">
+                          {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.price || 0)}
+                        </p>
+                      </div>
+                      <div className="flex justify-between items-center mb-1">
+                        <p className="text-[11px] text-zinc-500">Harga Total</p>
+                        <p className="text-xs font-bold text-blue-400">
+                          {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format((item.quantity + item.rentedQuantity + item.maintenanceQuantity) * (item.price || 0))}
+                        </p>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <p className="text-[11px] text-zinc-500">Harga Sewa ({item.rentPercentage || 0}%)</p>
+                        <p className="text-sm font-bold text-emerald-400">
+                          {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(((item.price || 0) * (item.rentPercentage || 0)) / 100)}
+                        </p>
+                      </div>
                     </div>
 
                     <div className="flex justify-between items-end border-t border-zinc-800/50 pt-4 mt-auto">

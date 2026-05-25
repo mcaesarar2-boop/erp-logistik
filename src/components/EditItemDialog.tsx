@@ -20,6 +20,7 @@ interface EditItemDialogProps {
     rentedQuantity: number
     maintenanceQuantity: number
     price?: number | null
+    rentPercentage?: number | null
     categories: { id: string; name: string }[]
   }
   allCategories: { id: string; name: string }[]
@@ -135,9 +136,15 @@ export function EditItemDialog({ item, allCategories }: EditItemDialogProps) {
             <Input name="code" defaultValue={item.code} className="bg-zinc-900 border-zinc-800" required />
           </div>
 
-          <div className="space-y-2">
-            <Label>Harga Beli Satuan (Rp)</Label>
-            <Input name="price" type="number" min="0" defaultValue={item.price || 0} className="bg-zinc-900 border-zinc-800" required />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Harga Beli Satuan (Rp)</Label>
+              <Input name="price" type="number" min="0" defaultValue={item.price || 0} className="bg-zinc-900 border-zinc-800" required />
+            </div>
+            <div className="space-y-2">
+              <Label>Persentase Sewa (%)</Label>
+              <Input name="rentPercentage" type="number" min="0" step="0.1" defaultValue={item.rentPercentage || 0} className="bg-zinc-900 border-zinc-800" required />
+            </div>
           </div>
 
           <div className="space-y-2">
