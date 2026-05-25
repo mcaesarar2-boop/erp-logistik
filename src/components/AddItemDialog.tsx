@@ -48,7 +48,7 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
     
     // Jika dari server mengembalikan error (seperti duplikasi kode)
     if (result?.success === false) {
-      setErrorMsg(result.error) // Munculkan kotak merah
+      setErrorMsg(result.error ?? "Terjadi kesalahan pada sistem.") // Munculkan kotak merah
       return // Berhenti di sini, JANGAN tutup pop-up nya!
     }
 

@@ -19,7 +19,7 @@ export function DeleteCategoryDialog({ category }: DeleteCategoryDialogProps) {
     const result = await deleteCategory(category.id)
     
     if (result?.success === false) {
-      setErrorMsg(result.error)
+      setErrorMsg(result.error ?? "Terjadi kesalahan saat menghapus label.")
       return
     }
 
