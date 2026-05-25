@@ -147,7 +147,7 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
                       <div 
                         key={name} 
                         className="p-2 px-3 text-sm text-zinc-200 hover:bg-zinc-700 cursor-pointer border-b border-zinc-700/50 last:border-0"
-                        onClick={() => { setNewName(name); setShowNameResults(false); }}
+                        onMouseDown={(e) => { e.preventDefault(); setNewName(name); setShowNameResults(false); }}
                       >
                         {name}
                       </div>
@@ -177,7 +177,7 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
                         <div 
                           key={code} 
                           className="p-2 px-3 text-sm text-zinc-200 hover:bg-zinc-700 cursor-pointer border-b border-zinc-700/50 last:border-0"
-                          onClick={() => { setNewCode(code); setShowCodeResults(false); }}
+                          onMouseDown={(e) => { e.preventDefault(); setNewCode(code); setShowCodeResults(false); }}
                         >
                           {code}
                         </div>
@@ -247,6 +247,7 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
                     setShowResults(true)
                   }}
                   onFocus={() => setShowResults(true)}
+                  onBlur={() => setTimeout(() => setShowResults(false), 200)}
                 />
                 <input type="hidden" name="itemId_validator" value={selectedItemId} required />
 
@@ -257,7 +258,8 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
                       <div 
                         key={item.id} 
                         className="p-3 hover:bg-zinc-700 cursor-pointer border-b border-zinc-700/50 last:border-0"
-                        onClick={() => {
+                        onMouseDown={(e) => {
+                          e.preventDefault()
                           setSearchQuery(`${item.name} (${item.code})`)
                           setSelectedItemId(item.id)
                           setShowResults(false)
