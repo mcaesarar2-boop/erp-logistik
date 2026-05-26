@@ -349,7 +349,7 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                     </div>
 
                     <div className="bg-zinc-950/50 rounded-lg p-2 border border-zinc-800/50 max-h-40 overflow-y-auto mb-4 space-y-1">
-                      {packageItems.map((item, idx) => (
+                      {packageItems.map((item: Item, idx: number) => (
                         <div key={idx} className="flex justify-between items-center text-xs py-1.5 border-b border-zinc-800/50 last:border-0 gap-2">
                           <div className="flex items-center gap-2 flex-1 min-w-0">
                             {item.imageUrl ? (
