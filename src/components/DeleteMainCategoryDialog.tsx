@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { deleteMainCategory } from "@/app/actions"
+import { deleteCategory } from "@/app/actions"
 import { Trash2 } from "lucide-react"
 
 interface DeleteMainCategoryDialogProps {
@@ -16,7 +16,7 @@ export function DeleteMainCategoryDialog({ category }: DeleteMainCategoryDialogP
 
   async function handleDelete() {
     setErrorMsg(null)
-    const result = await deleteMainCategory(category.id)
+    const result = await deleteCategory(category.id)
     
     if (result?.success === false) {
       setErrorMsg(result.error ?? "Terjadi kesalahan.")

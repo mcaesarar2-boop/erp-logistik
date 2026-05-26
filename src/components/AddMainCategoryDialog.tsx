@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { createMainCategory } from "@/app/actions"
+import { createCategory } from "@/app/actions"
 import { Plus } from "lucide-react"
 
 export function AddMainCategoryDialog() {
@@ -14,7 +14,7 @@ export function AddMainCategoryDialog() {
 
   async function handleSubmit(formData: FormData) {
     setErrorMsg(null)
-    const result = await createMainCategory(formData)
+    const result = await createCategory(formData)
     
     if (result?.success === false) {
       setErrorMsg(result.error ?? "Terjadi kesalahan.")

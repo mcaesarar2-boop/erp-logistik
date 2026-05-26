@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { updateMainCategory } from "@/app/actions"
+import { updateCategory } from "@/app/actions"
 import { Pencil } from "lucide-react"
 
 interface EditMainCategoryDialogProps {
@@ -18,7 +18,7 @@ export function EditMainCategoryDialog({ category }: EditMainCategoryDialogProps
 
   async function handleSubmit(formData: FormData) {
     setErrorMsg(null)
-    const result = await updateMainCategory(category.id, formData)
+    const result = await updateCategory(category.id, formData)
     
     if (result?.success === false) {
       setErrorMsg(result.error ?? "Terjadi kesalahan.")
