@@ -66,7 +66,7 @@ export function RentalInvoiceDialog({ items }: RentalInvoiceDialogProps) {
         </button>
       </DialogTrigger>
       {/* Tambahkan class print agar dialog menutupi seluruh layar saat dicetak dengan background putih teks hitam */}
-      <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-50 max-w-2xl max-h-[90vh] overflow-hidden flex flex-col print:!absolute print:!top-0 print:!left-0 print:!w-full print:!h-auto print:!max-w-none print:!max-h-none print:!bg-white print:!text-black print:!border-none print:!rounded-none print:!shadow-none print:z-[99999] print:!p-10 print:!block">
+      <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-50 max-w-2xl max-h-[90vh] overflow-hidden flex flex-col print:!absolute print:!top-0 print:!left-0 print:!translate-x-0 print:!translate-y-0 print:!w-full print:!h-auto print:!max-w-none print:!max-h-none print:!overflow-visible print:!bg-white print:!text-black print:!border-none print:!rounded-none print:!shadow-none print:z-[99999] print:!p-4 print:!block">
         <DialogHeader className="border-b border-zinc-800 print:border-zinc-300 pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <DialogTitle className="flex items-center gap-2 text-emerald-400 print:text-black text-2xl font-bold">

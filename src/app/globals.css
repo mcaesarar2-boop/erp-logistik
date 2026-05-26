@@ -132,8 +132,8 @@
 /* Tambahkan di bagian paling bawah globals.css */
 @media print {
   @page {
-    /* Menghilangkan margin dan tulisan header/footer default dari browser */
-    margin: 0; 
+    /* Margin 1cm agar tidak terpotong tepi printer fisik */
+    margin: 1cm; 
     size: auto;
   }
   
@@ -141,5 +141,8 @@
     /* Memaksa browser untuk mencetak warna background & border */
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important; 
+    /* Override scroll-lock bawaan komponen dialog agar print bisa berhalaman-halaman */
+    overflow: visible !important;
+    height: auto !important;
   }
 }
