@@ -4,15 +4,17 @@ import React, { useState, useEffect } from "react";
 import { EditItemDialog } from "@/components/EditItemDialog";
 import { DeleteItemDialog } from "@/components/DeleteItemDialog";
 import { AddCategoryDialog } from "@/components/AddCategoryDialog";
-import { EditCategoryDialog } from "@/components/EditCategoryDialog";
+import { EditCategoryDialog } from "@/components/EditCategoryDialog"; 
 import { DeleteCategoryDialog } from "@/components/DeleteCategoryDialog";
-import { Search, ArrowUpDown, History as HistoryIcon, Calendar, Trash2, Pencil, Loader2, Printer } from "lucide-react";
+import { Search, ArrowUpDown, History as HistoryIcon, Calendar, Trash2, Pencil, Loader2, Printer, PackageSearch } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { RentalInvoiceDialog } from "@/components/RentalInvoiceDialog";
 import { ReturnRentalDialog } from "@/components/ReturnRentalDialog";
 import { ReprintInvoiceDialog } from "@/components/ReprintInvoiceDialog";
-import { updateHistory, deleteHistory } from "@/app/actions";
+import { EditPackageDialog } from "@/components/EditPackageDialog";
+import { RentPackageDialog } from "@/components/RentPackageDialog";
+import { updateHistory, deleteHistory, deletePackageTemplate } from "@/app/actions";
 
 type Category = {
   id: string;
@@ -45,14 +47,22 @@ type History = {
   createdAt: Date | string;
 };
 
+type PackageTemplate = {
+  id: string;
+  name: string;
+  description: string | null;
+  payload: string;
+};
+
 interface MultiLayerDashboardProps {
   items: Item[];
   categories: Category[];
   histories: History[];
+  packages: PackageTemplate[];
 }
 
-export default function MultiLayerDashboard({ items, categories, histories }: MultiLayerDashboardProps) {
-  const [activeLayer, setActiveLayer] = useState<'home' | 'all_items' | 'rented' | 'maintenance' | 'history'>('home');
+export default function MultiLayerDashboard({ items, categories, histories, packages }: MultiLayerDashboardProps) {
+  const [activeLayer, setActiveLayer] = useState<'home' | 'all_items' | 'rented' | 'maintenance' | 'history' | 'packages'>('home');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>('name_asc');
@@ -62,6 +72,7 @@ export default function MultiLayerDashboard({ items, categories, histories }: Mu
   const [editingHistory, setEditingHistory] = useState<History | null>(null);
   const [deletingHistory, setDeletingHistory] = useState<History | null>(null);
   const [isHistoryActionLoading, setIsHistoryActionLoading] = useState(false);
+  const [deletingPackage, setDeletingPackage] = useState<PackageTemplate | null>(null);
 
   // CEK ADMIN CLIENT SIDE
   const [isAdmin, setIsAdmin] = useState(false)
@@ -149,6 +160,7 @@ export default function MultiLayerDashboard({ items, categories, histories }: Mu
     { id: 'rented', label: 'On Rented' },
     { id: 'maintenance', label: 'Maintenance' },
     { id: 'history', label: 'Riwayat Transaksi' },
+    { id: 'packages', label: 'Katalog Paket' },
   ] as const;
 
   // FUNGSI AKSI HISTORY
@@ -168,6 +180,14 @@ export default function MultiLayerDashboard({ items, categories, histories }: Mu
     await deleteHistory(deletingHistory.id);
     setIsHistoryActionLoading(false);
     setDeletingHistory(null);
+  }
+
+  const handleDeletePackage = async () => {
+    if (!deletingPackage) return;
+    setIsHistoryActionLoading(true);
+    await deletePackageTemplate(deletingPackage.id);
+    setIsHistoryActionLoading(false);
+    setDeletingPackage(null);
   }
 
   return (
@@ -289,8 +309,90 @@ export default function MultiLayerDashboard({ items, categories, histories }: Mu
         </div>
       )}
 
+      {/* Layer 2.6: Katalog Paket */}
+      {activeLayer === 'packages' && (
+        <div className="space-y-6">
+          <div className="flex items-center gap-3 border-b border-zinc-800 pb-4">
+            <PackageSearch className="w-6 h-6 text-zinc-400" />
+            <h2 className="text-xl font-bold text-zinc-100">Katalog Paket Rental</h2>
+          </div>
+
+          {packages.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {packages.map((pkg) => {
+                const payloadData = pkg.payload ? JSON.parse(pkg.payload) : [];
+                
+                const totalPackageRent = payloadData.reduce((acc: number, pItem: any) => {
+                  const itemDetail = items.find(i => i.id === pItem.id);
+                  if (!itemDetail) return acc;
+                  const rentPrice = ((itemDetail.price || 0) * (itemDetail.rentPercentage || 0)) / 100;
+                  return acc + (rentPrice * pItem.qty);
+                }, 0);
+
+                const packageItems = payloadData
+                  .map((pItem: any) => items.find(i => i.id === pItem.id))
+                  .filter((item: Item | undefined): item is Item => !!item);
+
+                return (
+                  <div key={pkg.id} className="bg-zinc-900/40 border border-zinc-800 rounded-xl p-5 shadow-sm flex flex-col relative group">
+                    <div className="flex justify-between items-start gap-4 mb-4">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-lg font-bold text-blue-400 mb-1 line-clamp-2">{pkg.name}</h3>
+                        <p className="text-xs text-zinc-500 line-clamp-1">{pkg.description || 'Tidak ada deskripsi paket.'}</p>
+                      </div>
+                      {isAdmin && (
+                        <div className="flex gap-2 shrink-0 md:opacity-0 opacity-100 group-hover:opacity-100 transition-opacity z-10">
+                          <EditPackageDialog pkg={pkg} items={items} />
+                          <button onClick={() => setDeletingPackage(pkg)} className="p-2 bg-red-950/50 hover:bg-red-900 text-red-400 rounded-md transition-colors shadow-sm" title="Hapus Paket"><Trash2 className="w-4 h-4" /></button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="bg-zinc-950/50 rounded-lg p-2 border border-zinc-800/50 max-h-40 overflow-y-auto mb-4 space-y-1">
+                      {packageItems.map((item, idx) => (
+                        <div key={idx} className="flex justify-between items-center text-xs py-1.5 border-b border-zinc-800/50 last:border-0 gap-2">
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            {item.imageUrl ? (
+                               <div 
+                                 className="w-7 h-7 rounded border border-zinc-700 overflow-hidden shrink-0 cursor-pointer hover:opacity-75 transition-opacity"
+                                 onClick={() => setSelectedImage(item.imageUrl!)}
+                                 title="Lihat Foto"
+                               >
+                                 <img src={item.imageUrl} className="w-full h-full object-cover" alt="thumb" />
+                               </div>
+                            ) : (
+                               <div className="w-7 h-7 rounded border border-zinc-800 bg-zinc-900 shrink-0 flex items-center justify-center text-[8px] text-zinc-600">
+                                  N/A
+                               </div>
+                            )}
+                            <span className="text-zinc-300 truncate">{item.name}</span>
+                          </div>
+                          <span className="font-bold text-zinc-400 shrink-0 bg-zinc-900 px-2 py-0.5 rounded">{payloadData.find((p:any) => p.id === item.id)?.qty || 0} Unit</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-auto pt-4 border-t border-zinc-800 flex justify-between items-center">
+                      <div>
+                        <span className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Total Harga Sewa</span>
+                        <span className="text-lg font-bold text-emerald-400 leading-none">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(totalPackageRent)}</span>
+                      </div>
+                      <RentPackageDialog pkg={pkg} items={items} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-16 text-zinc-500 bg-zinc-900/20 rounded-xl border border-zinc-800">
+              Belum ada template paket yang dibuat. Silakan buat melalui tombol "Bikin Paket".
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Layer 3: Data Barang (All, Rented, Maintenance) */}
-      {activeLayer !== 'home' && activeLayer !== 'history' && (
+      {activeLayer !== 'home' && activeLayer !== 'history' && activeLayer !== 'packages' && (
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <h2 className="text-xl font-bold text-zinc-100">
@@ -505,6 +607,20 @@ export default function MultiLayerDashboard({ items, categories, histories }: Mu
           <div className="grid grid-cols-2 gap-4 mt-6">
             <button onClick={() => setDeletingHistory(null)} className="h-10 border border-zinc-800 text-zinc-400 hover:bg-zinc-900 rounded-md">Batal</button>
             <button onClick={handleDeleteHistory} disabled={isHistoryActionLoading} className="h-10 bg-red-600 hover:bg-red-700 text-white rounded-md flex justify-center items-center">
+              {isHistoryActionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Ya, Hapus"}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* KOTAK POPUP DELETE PAKET */}
+      <Dialog open={!!deletingPackage} onOpenChange={(open) => !open && setDeletingPackage(null)}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-50">
+          <DialogTitle className="text-red-400">Hapus Template Paket?</DialogTitle>
+          <p className="text-sm text-zinc-400 mt-2">Apakah Anda yakin ingin menghapus template paket <strong>"{deletingPackage?.name}"</strong>? (Tindakan ini tidak bisa dibatalkan).</p>
+          <div className="grid grid-cols-2 gap-4 mt-6">
+            <button onClick={() => setDeletingPackage(null)} className="h-10 border border-zinc-800 text-zinc-400 hover:bg-zinc-900 rounded-md">Batal</button>
+            <button onClick={handleDeletePackage} disabled={isHistoryActionLoading} className="h-10 bg-red-600 hover:bg-red-700 text-white rounded-md flex justify-center items-center">
               {isHistoryActionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Ya, Hapus"}
             </button>
           </div>

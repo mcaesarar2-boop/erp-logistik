@@ -429,3 +429,57 @@ export async function deleteHistory(id: string) {
     return { success: false, error: "Gagal menghapus riwayat." };
   }
 }
+
+// --- FUNGSI PAKET / TEMPLATE RENTAL ---
+export async function createPackageTemplate(formData: FormData) {
+  try {
+    await verifyAdmin();
+    const name = formData.get("name") as string;
+    const description = formData.get("description") as string;
+    const payload = formData.get("payload") as string;
+
+    if (!name || !payload) return { success: false, error: "Data tidak lengkap." };
+
+    await prisma.packageTemplate.create({
+      data: { name, description, payload }
+    });
+    revalidatePath("/");
+    return { success: true };
+  } catch (error: any) {
+    console.error("Create Package Error:", error);
+    return { success: false, error: "Gagal membuat paket template." };
+  }
+}
+
+export async function updatePackageTemplate(id: string, formData: FormData) {
+  try {
+    await verifyAdmin();
+    const name = formData.get("name") as string;
+    const description = formData.get("description") as string;
+    const payload = formData.get("payload") as string;
+
+    if (!name || !payload) return { success: false, error: "Data tidak lengkap." };
+
+    await prisma.packageTemplate.update({
+      where: { id },
+      data: { name, description, payload }
+    });
+    revalidatePath("/");
+    return { success: true };
+  } catch (error: any) {
+    console.error("Update Package Error:", error);
+    return { success: false, error: "Gagal memperbarui paket template." };
+  }
+}
+
+export async function deletePackageTemplate(id: string) {
+  try {
+    await verifyAdmin();
+    await prisma.packageTemplate.delete({ where: { id } });
+    revalidatePath("/");
+    return { success: true };
+  } catch (error: any) {
+    console.error("Delete Package Error:", error);
+    return { success: false, error: "Gagal menghapus paket template." };
+  }
+}

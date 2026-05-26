@@ -3,6 +3,7 @@ import MultiLayerDashboard from "@/components/MultiLayerDashboard"
 import { AddItemDialog } from "@/components/AddItemDialog"
 import { AddRentalDialog } from "@/components/AddRentalDialog"
 import { AddMaintenanceDialog } from "@/components/AddMaintenanceDialog"
+import { AddPackageDialog } from "@/components/AddPackageDialog"
 import { supabase } from "@/lib/supabase"
 
 export const dynamic = "force-dynamic"
@@ -20,6 +21,11 @@ export default async function DashboardPage() {
     orderBy: { date: 'desc' } // Urutkan riwayat dari yang terbaru
   })
 
+  // Mengambil daftar paket template
+  const packages = await prisma.packageTemplate.findMany({
+    orderBy: { createdAt: 'desc' }
+  }).catch(() => []) // antisipasi jika tabel belum di-push
+
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -28,13 +34,14 @@ export default async function DashboardPage() {
           <p className="text-sm text-zinc-400">Kelola ketersediaan barang logistik Anda.</p>
         </div>
         <div className="flex flex-col sm:flex-row flex-wrap w-full md:w-auto gap-2 mt-2 md:mt-0 sm:justify-end">
-          <AddRentalDialog items={items} />
+          <AddPackageDialog items={items} />
+          <AddRentalDialog items={items} packages={packages} />
           <AddMaintenanceDialog items={items} />
           <AddItemDialog items={items} categories={categories} />
         </div>
       </div>
       
-      <MultiLayerDashboard items={items} categories={categories} histories={histories} />
+      <MultiLayerDashboard items={items} categories={categories} histories={histories} packages={packages} />
     </main>
   )
 }

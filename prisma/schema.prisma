@@ -50,3 +50,13 @@ model History {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
+
+// --- TABEL TEMPLATE PAKET RENTAL ---
+model PackageTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  payload     String   @db.Text // Menyimpan data isi paket berbentuk format JSON
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

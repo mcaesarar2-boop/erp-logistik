@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { addBulkRental } from "@/app/actions"
+import { addBulkRental, deletePackageTemplate, createHistory } from "@/app/actions"
 import { supabase } from "@/lib/supabase"
-import { Trash2, Search, ShoppingCart } from "lucide-react"
+import { Trash2, Search, ShoppingCart, PackageOpen, AlertCircle, Loader2 } from "lucide-react"
 
 interface AddRentalDialogProps {
   items: {
@@ -18,15 +18,25 @@ interface AddRentalDialogProps {
     price?: number | null
     rentPercentage?: number | null
   }[]
+  packages?: {
+    id: string
+    name: string
+    description?: string | null
+    payload: string
+  }[]
 }
 
-export function AddRentalDialog({ items }: AddRentalDialogProps) {
+export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) {
   const [open, setOpen] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [warningMsg, setWarningMsg] = useState<string | null>(null)
   
   const [searchQuery, setSearchQuery] = useState("")
   const [showResults, setShowResults] = useState(false)
   const [cart, setCart] = useState<any[]>([])
+  const [selectedPackageId, setSelectedPackageId] = useState<string>("")
+  const [isDeletingPkg, setIsDeletingPkg] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [isAdmin, setIsAdmin] = useState(false)
   useEffect(() => {
@@ -50,14 +60,81 @@ export function AddRentalDialog({ items }: AddRentalDialogProps) {
     setShowResults(false)
   }
 
+  const handleLoadPackage = (pkgId: string) => {
+    setSelectedPackageId(pkgId)
+    setWarningMsg(null)
+    setErrorMsg(null)
+    
+    if (!pkgId) return;
+    
+    const pkg = packages.find(p => p.id === pkgId);
+    if (!pkg) return;
+
+    try {
+      const parsedPayload = JSON.parse(pkg.payload);
+      let newCart = [...cart];
+      let hasError = false;
+      let errorDetails = "";
+
+      for (const pItem of parsedPayload) {
+        const realItem = items.find(i => i.id === pItem.id);
+        if (!realItem) {
+          hasError = true;
+          errorDetails += `${pItem.name} tidak ditemukan. `;
+          continue;
+        }
+
+        const availableQty = realItem.quantity;
+        if (pItem.qty > availableQty) {
+          hasError = true;
+          errorDetails += `${realItem.name} stok tidak cukup (Butuh ${pItem.qty}, Ada ${availableQty}). `;
+        }
+      }
+
+      if (hasError) {
+        setErrorMsg(`Paket tidak dapat digunakan: ${errorDetails}`);
+        setSelectedPackageId("");
+        return;
+      }
+
+      parsedPayload.forEach((pItem: any) => {
+        const realItem = items.find(i => i.id === pItem.id)!;
+        const cartItemIndex = newCart.findIndex(c => c.id === realItem.id);
+        
+        if (cartItemIndex >= 0) {
+          newCart[cartItemIndex].qty = pItem.qty;
+        } else {
+          newCart.push({ ...realItem, qty: pItem.qty });
+        }
+      });
+
+      setCart(newCart);
+    } catch (e) {
+      setErrorMsg("Gagal memuat paket.");
+      setSelectedPackageId("");
+    }
+  }
+
+  const handleDeletePackage = async () => {
+    if (!selectedPackageId || !confirm("Yakin ingin menghapus template paket ini?")) return;
+    setIsDeletingPkg(true);
+    await deletePackageTemplate(selectedPackageId);
+    setIsDeletingPkg(false);
+    setSelectedPackageId("");
+    setWarningMsg(null);
+  }
+
   const updateQty = (id: string, newQty: number) => {
     setCart(cart.map(c => c.id === id ? { ...c, qty: Math.min(Math.max(1, newQty), c.quantity) } : c))
   }
 
   async function handleSubmit(formData: FormData) {
     setErrorMsg(null)
+    setIsSubmitting(true)
+    
     if (cart.length === 0) {
       setErrorMsg("Belum ada barang yang dipilih.")
+      setIsSubmitting(false)
       return
     }
     
@@ -66,10 +143,32 @@ export function AddRentalDialog({ items }: AddRentalDialogProps) {
     
     if (result?.success === false) {
       setErrorMsg(result.error ?? "Terjadi kesalahan sistem.")
+      setIsSubmitting(false)
       return
     }
+
+    // Tambahkan pencatatan riwayat transaksi
+    const historyFormData = new FormData()
+    historyFormData.append("type", "INVOICE_RENTAL")
+    historyFormData.append("date", new Date().toISOString().split('T')[0])
+    
+    const totalQty = cart.reduce((acc: number, i: any) => acc + i.qty, 0)
+    historyFormData.append("description", `Rental Masal (${totalQty} Unit Aset)`)
+    
+    const historyPayload = cart.map((c: any) => ({
+      name: c.name,
+      code: c.code,
+      qty: c.qty,
+      price: ((c.price || 0) * (c.rentPercentage || 0)) / 100
+    }))
+    historyFormData.append("payload", JSON.stringify(historyPayload))
+    await createHistory(historyFormData)
+
+    setIsSubmitting(false)
     setOpen(false)
     setCart([]) // Reset state
+    setSelectedPackageId("")
+    setWarningMsg(null)
   }
 
   const grandTotal = cart.reduce((acc, item) => acc + (item.qty * ((item.price || 0) * (item.rentPercentage || 0) / 100)), 0)
@@ -77,7 +176,7 @@ export function AddRentalDialog({ items }: AddRentalDialogProps) {
   if (!isAdmin) return null;
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) { setErrorMsg(null); setCart([]); }}}>
+    <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) { setErrorMsg(null); setWarningMsg(null); setCart([]); setSelectedPackageId(""); }}}>
       <DialogTrigger asChild>
         <Button className="w-full sm:w-auto shrink-0 bg-emerald-950/50 border border-emerald-900 text-emerald-400 hover:bg-emerald-900 hover:text-emerald-50">
           <ShoppingCart className="w-4 h-4 mr-2" /> Tambah Rental
@@ -93,7 +192,37 @@ export function AddRentalDialog({ items }: AddRentalDialogProps) {
           </div>
         )}
 
+        {warningMsg && (
+          <div className="bg-amber-950/50 border border-amber-900 text-amber-400 text-xs p-3 rounded-md flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>{warningMsg}</span>
+          </div>
+        )}
+
         <form action={handleSubmit} className="flex flex-col gap-4 pt-2 flex-1 overflow-hidden">
+          {packages.length > 0 && (
+            <div className="space-y-2 shrink-0 bg-zinc-900/50 p-3 rounded-lg border border-zinc-800">
+              <Label className="flex items-center gap-2"><PackageOpen className="w-4 h-4 text-emerald-500"/> Gunakan Template Paket</Label>
+              <div className="flex gap-2">
+                <select 
+                  className="flex-1 bg-zinc-950 text-zinc-100 text-sm border border-zinc-700 rounded-md outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer p-2"
+                  value={selectedPackageId}
+                  onChange={(e) => handleLoadPackage(e.target.value)}
+                >
+                  <option value="">-- Pilih Paket (Opsional) --</option>
+                  {packages.map(p => (
+                    <option key={p.id} value={p.id}>{p.name} {p.description ? `- ${p.description}` : ''}</option>
+                  ))}
+                </select>
+                {selectedPackageId && (
+                  <Button type="button" variant="destructive" size="icon" onClick={handleDeletePackage} disabled={isDeletingPkg} className="shrink-0 h-auto px-3 border border-red-900 bg-red-950/50 text-red-400 hover:bg-red-900">
+                    {isDeletingPkg ? <Loader2 className="w-4 h-4 animate-spin"/> : <Trash2 className="w-4 h-4" />}
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="space-y-2 shrink-0">
             <Label>Cari Aset Tersedia</Label>
             <div className="relative z-50">
@@ -146,7 +275,9 @@ export function AddRentalDialog({ items }: AddRentalDialogProps) {
               <span className="text-sm text-zinc-400">Total Tagihan Sewa:</span><span className="text-lg font-bold text-emerald-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(grandTotal)}</span>
             </div>
           )}
-          <Button type="submit" disabled={cart.length === 0} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 mt-2">Proses Sewa (Rental)</Button>
+          <Button type="submit" disabled={cart.length === 0 || isSubmitting} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 mt-2">
+            {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : "Proses Sewa (Rental)"}
+          </Button>
         </form>
       </DialogContent>
     </Dialog>
