@@ -14,6 +14,7 @@ import { ReturnRentalDialog } from "@/components/ReturnRentalDialog";
 import { ReprintInvoiceDialog } from "@/components/ReprintInvoiceDialog";
 import { EditPackageDialog } from "@/components/EditPackageDialog";
 import { RentPackageDialog } from "@/components/RentPackageDialog";
+import { PrintPackageDialog } from "@/components/PrintPackageDialog";
 import { updateHistory, deleteHistory, deletePackageTemplate } from "@/app/actions";
 
 type Category = {
@@ -241,6 +242,7 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
               <p className="text-3xl font-bold text-red-500">{maintenanceUnits}</p>
             </div>
           </div>
+
         </div>
       )}
 
@@ -377,7 +379,10 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                         <span className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Total Harga Sewa</span>
                         <span className="text-lg font-bold text-emerald-400 leading-none">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(totalPackageRent)}</span>
                       </div>
-                      <RentPackageDialog pkg={pkg} items={items} />
+                      <div className="flex items-center gap-2">
+                        <PrintPackageDialog pkg={pkg} items={items} />
+                        <RentPackageDialog pkg={pkg} items={items} />
+                      </div>
                     </div>
                   </div>
                 );

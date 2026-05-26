@@ -1,5 +1,6 @@
 "use client"
 
+import React from "react"
 import { useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Receipt, Printer, Loader2 } from "lucide-react"
@@ -26,7 +27,7 @@ export function RentalInvoiceDialog({ items }: RentalInvoiceDialogProps) {
 
   // Pastikan hanya memproses aset yang sedang keluar/disewa
   const rentedItems = items.filter(i => i.rentedQuantity > 0)
-  
+
   // Hitung total dari keseluruhan item yang dirental
   const grandTotal = rentedItems.reduce((acc, item) => {
     const rentPricePerItem = ((item.price || 0) * (item.rentPercentage || 0)) / 100
@@ -42,7 +43,10 @@ export function RentalInvoiceDialog({ items }: RentalInvoiceDialogProps) {
     
     // Simpan snapshot nama, qty, dan harga pada waktu dicetak
     const payload = rentedItems.map(i => ({
-      name: i.name, code: i.code, qty: i.rentedQuantity, price: ((i.price || 0) * (i.rentPercentage || 0)) / 100
+      name: i.name, 
+      code: i.code, 
+      qty: i.rentedQuantity, 
+      price: ((i.price || 0) * (i.rentPercentage || 0)) / 100
     }))
     formData.append("payload", JSON.stringify(payload))
 
