@@ -50,14 +50,56 @@ async function uploadImageToSupabase(imageFile: File | null): Promise<string | u
   }
 }
 
+// --- FUNGSI HELPER UNTUK MEMBUAT PREFIX KODE ASET ---
+function generatePrefix(categoryName: string) {
+  const words = categoryName.trim().split(/\s+/);
+  if (words.length === 1) {
+    return words[0].substring(0, 3).toUpperCase(); 
+  } else {
+    return words.map(w => w[0]).join('').substring(0, 3).toUpperCase();
+  }
+}
+
 export async function createItem(formData: FormData) {
   try {
     await verifyAdmin();
 
     const name = formData.get("name") as string
-    const code = formData.get("code") as string
+    let code = formData.get("code") as string
+    const categoryIds = formData.getAll("categories") as string[]
+    
+    if (categoryIds.length === 0) return { success: false, error: "Pilih minimal 1 kategori/label." }
 
-    // --- 1. CEK DUPLIKASI KODE ASET ---
+    // --- 1. AUTO GENERATE KODE JIKA KOSONG ---
+    if (!code || code.trim() === "") {
+      let prefix = "ITM";
+      
+      const selectedCategories = await prisma.category.findMany({
+        where: { id: { in: categoryIds } }
+      });
+      if (selectedCategories.length > 0) {
+        const prefixes = selectedCategories.map(c => generatePrefix(c.name)).sort();
+        prefix = prefixes.join('-');
+      }
+      
+      const lastItem = await prisma.item.findFirst({
+        where: { code: { startsWith: `${prefix}-` } },
+        orderBy: { code: 'desc' }
+      });
+      let nextSerial = 1;
+      if (lastItem) {
+        const parts = lastItem.code.split('-');
+        if (parts.length > 1) {
+          const lastNumber = parseInt(parts[parts.length - 1], 10);
+          if (!isNaN(lastNumber)) {
+            nextSerial = lastNumber + 1;
+          }
+        }
+      }
+      code = `${prefix}-${nextSerial.toString().padStart(3, '0')}`;
+    }
+
+    // --- 2. CEK DUPLIKASI KODE ASET ---
     const existingItem = await prisma.item.findUnique({
       where: { code }
     })
@@ -73,12 +115,9 @@ export async function createItem(formData: FormData) {
     const quantity = parseInt(formData.get("quantity") as string) || 0 
     const price = parseInt(formData.get("price") as string) || 0
     const rentPercentage = parseFloat(formData.get("rentPercentage") as string) || 0
-    const categoryIds = formData.getAll("categories") as string[]
     
     const imageFile = formData.get("image") as File | null
     const imageUrl = await uploadImageToSupabase(imageFile) || null;
-
-    if (categoryIds.length === 0) return { success: false, error: "Pilih minimal 1 kategori/label." }
 
     // Simpan ke database jika lolos semua ujian
     await prisma.item.create({
@@ -481,5 +520,55 @@ export async function deletePackageTemplate(id: string) {
   } catch (error: any) {
     console.error("Delete Package Error:", error);
     return { success: false, error: "Gagal menghapus paket template." };
+  }
+}
+
+// --- FUNGSI BATCH GENERATE (FORMAT ULANG SEMUA KODE MASAL) ---
+export async function batchRegenerateCodes() {
+  try {
+    await verifyAdmin();
+    
+    // Ambil semua barang dari yang terlama ke terbaru
+    const items = await prisma.item.findMany({
+      include: { categories: true },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    // 1. Ubah semua kode menjadi "sementara" untuk menghindari bentrok / konflik duplikasi di Database
+    const tempUpdates = items.map(item => 
+      prisma.item.update({
+        where: { id: item.id },
+        data: { code: `TEMP-${item.id}` }
+      })
+    );
+    await prisma.$transaction(tempUpdates);
+
+    // 2. Buat dan terapkan kode baru dengan format otomatis
+    const prefixCounters: Record<string, number> = {};
+    const finalUpdates = [];
+
+    for (const item of items) {
+      let prefix = "ITM";
+      if (item.categories.length > 0) {
+        const prefixes = item.categories.map(c => generatePrefix(c.name)).sort();
+        prefix = prefixes.join('-');
+      }
+
+      if (!prefixCounters[prefix]) prefixCounters[prefix] = 1;
+      else prefixCounters[prefix]++;
+
+      const newSerial = prefixCounters[prefix];
+      const newCode = `${prefix}-${newSerial.toString().padStart(3, '0')}`;
+
+      finalUpdates.push(prisma.item.update({ where: { id: item.id }, data: { code: newCode } }));
+    }
+
+    // Simpan semua kode baru
+    await prisma.$transaction(finalUpdates);
+    revalidatePath("/");
+    return { success: true, count: finalUpdates.length };
+  } catch (error: any) {
+    console.error("Batch Update Error:", error);
+    return { success: false, error: "Gagal merapikan kode aset masal." };
   }
 }

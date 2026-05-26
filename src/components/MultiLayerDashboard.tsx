@@ -15,7 +15,7 @@ import { ReprintInvoiceDialog } from "@/components/ReprintInvoiceDialog";
 import { EditPackageDialog } from "@/components/EditPackageDialog";
 import { RentPackageDialog } from "@/components/RentPackageDialog";
 import { PrintPackageDialog } from "@/components/PrintPackageDialog";
-import { updateHistory, deleteHistory, deletePackageTemplate } from "@/app/actions";
+import { updateHistory, deleteHistory, deletePackageTemplate, batchRegenerateCodes } from "@/app/actions";
 
 type Category = {
   id: string;
@@ -78,6 +78,10 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
   const [deletingHistory, setDeletingHistory] = useState<History | null>(null);
   const [isHistoryActionLoading, setIsHistoryActionLoading] = useState(false);
   const [deletingPackage, setDeletingPackage] = useState<PackageTemplate | null>(null);
+  
+  // State untuk Batch Update Kode
+  const [showBatchDialog, setShowBatchDialog] = useState(false);
+  const [isBatchLoading, setIsBatchLoading] = useState(false);
 
   // CEK ADMIN CLIENT SIDE
   const [isAdmin, setIsAdmin] = useState(false)
@@ -205,6 +209,17 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
     setIsHistoryActionLoading(false);
     setDeletingPackage(null);
   }
+
+  const handleBatchRegenerate = async () => {
+    setIsBatchLoading(true);
+    const res = await batchRegenerateCodes();
+    setIsBatchLoading(false);
+    if (res?.success) {
+      setShowBatchDialog(false);
+    } else {
+      alert(res?.error || "Gagal memperbarui kode masal.");
+    }
+  };
 
   return (
     <div className="w-full">
@@ -480,6 +495,19 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                   <RentalInvoiceDialog items={itemsToDisplay} />
                 </>
               )}
+
+              {/* TAMPILKAN TOMBOL BATCH RAPIKAN KODE JIKA DI TAB ALL ITEMS */}
+              {isAdmin && activeLayer === 'all_items' && (
+                <>
+                  <div className="w-px h-4 bg-zinc-700 mx-1 hidden sm:block"></div>
+                  <button
+                    onClick={() => setShowBatchDialog(true)}
+                    className="flex items-center gap-2 bg-indigo-950/50 text-indigo-400 hover:bg-indigo-900 px-3 py-1.5 rounded-md text-sm font-medium transition-colors border border-indigo-900 shadow-sm whitespace-nowrap"
+                  >
+                    Rapikan Semua Kode
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -674,6 +702,28 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
             <button onClick={() => setDeletingPackage(null)} className="h-10 border border-zinc-800 text-zinc-400 hover:bg-zinc-900 rounded-md">Batal</button>
             <button onClick={handleDeletePackage} disabled={isHistoryActionLoading} className="h-10 bg-red-600 hover:bg-red-700 text-white rounded-md flex justify-center items-center">
               {isHistoryActionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Ya, Hapus"}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* KOTAK POPUP BATCH REGENERATE KODE */}
+      <Dialog open={showBatchDialog} onOpenChange={(open) => !open && setShowBatchDialog(false)}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-50">
+          <DialogTitle className="text-indigo-400">Format Ulang Semua Kode Aset?</DialogTitle>
+          <p className="text-sm text-zinc-400 mt-2">
+            Tindakan ini akan <strong>mengubah seluruh kode aset saat ini</strong> secara otomatis menggunakan format baru (Contoh: <code>AUD-BCL-001</code>) berdasarkan label yang terpasang pada masing-masing barang.
+          </p>
+          <div className="bg-amber-950/50 border border-amber-900/50 p-3 rounded-md mt-4">
+            <p className="text-sm text-amber-400 font-medium">Perhatian:</p>
+            <p className="text-xs text-amber-500/80 mt-1">
+              Jika Anda sudah mencetak label barcode/QR fisik menggunakan kode lama, fisik label tersebut tidak akan sinkron lagi dengan sistem setelah proses ini. Pastikan Anda siap mencetak ulang label jika diperlukan.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-4 mt-6">
+            <button onClick={() => setShowBatchDialog(false)} className="h-10 border border-zinc-800 text-zinc-400 hover:bg-zinc-900 rounded-md">Batal</button>
+            <button onClick={handleBatchRegenerate} disabled={isBatchLoading} className="h-10 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md flex justify-center items-center">
+              {isBatchLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Ya, Format Ulang"}
             </button>
           </div>
         </DialogContent>

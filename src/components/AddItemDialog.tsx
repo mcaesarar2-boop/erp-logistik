@@ -162,14 +162,13 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
                 <div className="relative">
                   <Input 
                     name="code" 
-                    placeholder="DJ-MIX-001" 
+                    placeholder="Kosongkan untuk otomatis" 
                     className="bg-zinc-900 border-zinc-800" 
                     value={newCode}
                     onChange={(e) => { setNewCode(e.target.value); setShowCodeResults(true); }}
                     onFocus={() => setShowCodeResults(true)}
                     onBlur={() => setTimeout(() => setShowCodeResults(false), 200)}
                     autoComplete="off"
-                    required 
                   />
                   {showCodeResults && newCode && suggestedCodes.length > 0 && (
                     <div className="absolute top-full mt-1 left-0 right-0 max-h-[150px] overflow-y-auto overflow-x-hidden bg-zinc-800 border border-zinc-700 rounded-md shadow-2xl z-50">
