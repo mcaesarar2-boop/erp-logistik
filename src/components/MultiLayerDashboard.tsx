@@ -69,6 +69,10 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
   const [sortBy, setSortBy] = useState<string>('name_asc');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [itemsPerPage, setItemsPerPage] = useState<number>(20);
+
   // State untuk Fitur Edit & Delete History
   const [editingHistory, setEditingHistory] = useState<History | null>(null);
   const [deletingHistory, setDeletingHistory] = useState<History | null>(null);
@@ -95,6 +99,11 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
       setSelectedCategory('ALL');
     }
   }, [categories, selectedCategory, currentCategoryObj]);
+
+  // Reset pagination saat filter, pencarian, sort atau tab berubah
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeLayer, selectedCategory, searchQuery, sortBy]);
 
   // --- LOGIKA PENCARIAN SUPER CERDAS ---
   // Memfilter berdasarkan Label (Select Dropdown) DAN Teks Pencarian (Barang/Kode/Label)
@@ -144,6 +153,12 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
     
     return 0;
   });
+
+  // --- LOGIKA PAGINATION ---
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = itemsToDisplay.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(itemsToDisplay.length / itemsPerPage);
 
   const totalItems = items.length;
   const availableUnits = items.reduce((acc, item) => acc + item.quantity, 0);
@@ -470,8 +485,9 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
 
           {/* Render Tabel/List Data Barang */}
           {itemsToDisplay.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {itemsToDisplay.map(item => (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {currentItems.map(item => (
                 <div key={item.id} className="rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/60 transition-all flex flex-col min-h-[320px] overflow-hidden shadow-lg">
                   <div className="h-48 w-full bg-zinc-950/50 relative group overflow-hidden border-b border-zinc-800">
                     {item.imageUrl ? (
@@ -562,7 +578,38 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                   </div>
                 </div>
               ))}
-            </div>
+              </div>
+
+              {/* Pagination Controls */}
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-8 border-t border-zinc-800 pt-6">
+                <div className="flex items-center gap-2 text-sm text-zinc-400">
+                  <span>Menampilkan</span>
+                  <select
+                    value={itemsPerPage}
+                    onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                    className="bg-zinc-950 border border-zinc-700 rounded px-2 py-1 text-zinc-100 outline-none focus:ring-1 focus:ring-zinc-500 cursor-pointer"
+                  >
+                    <option value={20}>20</option>
+                    <option value={30}>30</option>
+                    <option value={40}>40</option>
+                    <option value={50}>50</option>
+                  </select>
+                  <span>dari {itemsToDisplay.length} aset</span>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-md text-sm text-zinc-300 hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                    Sebelumnya
+                  </button>
+                  <span className="text-sm text-zinc-400 px-2 font-medium">
+                    Halaman {currentPage} dari {totalPages}
+                  </span>
+                  <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage >= totalPages} className="px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-md text-sm text-zinc-300 hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                    Selanjutnya
+                  </button>
+                </div>
+              </div>
+            </>
           ) : (
             <div className="text-center py-16 text-zinc-500 bg-zinc-900/20 rounded-xl border border-zinc-800">
               Tidak ada barang yang ditemukan pada tab dan label ini.
