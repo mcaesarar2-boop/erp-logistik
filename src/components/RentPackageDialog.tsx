@@ -110,7 +110,8 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
         code: pItem.code,
         qty: pItem.qty,
         returnedQty: 0,
-        price: rentPricePerItem * (1 - (discountPercentage / 100))
+        price: rentPricePerItem * (1 - (discountPercentage / 100)),
+        footnote: pItem.footnote
       }
     })
     historyFormData.append("payload", JSON.stringify(historyPayload))
@@ -151,7 +152,11 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
                 const rentPricePerItem = realItem ? ((realItem.price || 0) * (realItem.rentPercentage || 0)) / 100 : 0;
                 return (
                   <div key={idx} className={`flex justify-between items-center p-3 rounded-lg border ${isEnough ? 'bg-zinc-950 border-zinc-800/50' : 'bg-red-950/20 border-red-900/50'}`}>
-                    <div className="min-w-0 flex-1"><p className={`text-sm font-bold truncate ${isEnough ? 'text-zinc-200' : 'text-red-400'}`}>{pItem.name}</p><p className="text-xs text-zinc-500">{pItem.code} {realItem && !isEnough && `(Sisa: ${realItem.quantity})`}</p></div>
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-sm font-bold truncate ${isEnough ? 'text-zinc-200' : 'text-red-400'}`}>{pItem.name}</p>
+                      <p className="text-xs text-zinc-500">{pItem.code} {realItem && !isEnough && `(Sisa: ${realItem.quantity})`}</p>
+                      {pItem.footnote && <p className="text-[10px] text-zinc-400 italic mt-0.5 truncate">{pItem.footnote}</p>}
+                    </div>
                     <div className="text-right shrink-0"><p className="text-xs text-zinc-400">{pItem.qty} Unit × {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(rentPricePerItem)}</p></div>
                   </div>
                 )
