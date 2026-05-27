@@ -117,7 +117,7 @@ export async function createItem(formData: FormData) {
     const description = formData.get("description") as string
     // Hindari NaN dengan fallback fallback ke 0
     const quantity = parseInt(formData.get("quantity") as string) || 0 
-    const price = parseInt(formData.get("price") as string) || 0
+    const price = parseFloat(formData.get("price") as string) || 0
     const rentPercentage = parseFloat(formData.get("rentPercentage") as string) || 0
     
     const imageFile = formData.get("image") as File | null
@@ -168,7 +168,7 @@ export async function updateItem(id: string, formData: FormData) {
     const quantity = parseInt(formData.get("quantity") as string) || 0
     const rentedQuantity = parseInt(formData.get("rentedQuantity") as string) || 0
     const maintenanceQuantity = parseInt(formData.get("maintenanceQuantity") as string) || 0
-    const price = parseInt(formData.get("price") as string) || 0
+    const price = parseFloat(formData.get("price") as string) || 0
     const rentPercentage = parseFloat(formData.get("rentPercentage") as string) || 0
     const categoryIds = formData.getAll("categories") as string[]
 
