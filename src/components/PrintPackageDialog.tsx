@@ -77,6 +77,9 @@ export function PrintPackageDialog({ pkg, items }: PrintPackageDialogProps) {
                   <div className="min-w-0 flex-1">
                     <p className="font-bold text-sm text-zinc-100 print:text-black truncate">{item.name}</p>
                     <p className="text-xs text-zinc-500 print:text-zinc-600">{item.code}</p>
+                    {item.footnote && (
+                      <p className="text-xs text-zinc-500 print:text-zinc-500 italic mt-0.5">{item.footnote}</p>
+                    )}
                   </div>
                   <div className="text-right shrink-0">
                     <div className="text-xs text-zinc-400 print:text-zinc-600 mb-0.5">

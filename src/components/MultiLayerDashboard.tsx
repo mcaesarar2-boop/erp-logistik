@@ -329,9 +329,12 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                     
                     <div className="mt-4 bg-zinc-950/50 rounded-lg p-3 border border-zinc-800/50 max-h-32 overflow-y-auto">
                       {payloadData.map((d: any, idx: number) => (
-                        <div key={idx} className="flex justify-between items-center text-xs py-1 border-b border-zinc-800/50 last:border-0">
-                          <span className="text-zinc-300 truncate max-w-[60%]">{d.name} <span className="text-zinc-600">({d.code})</span></span>
-                          <span className="font-bold text-emerald-400">{d.qty} Unit x {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(d.price)}</span>
+                        <div key={idx} className="flex justify-between items-start text-xs py-1 border-b border-zinc-800/50 last:border-0 gap-2">
+                          <div className="flex flex-col min-w-0 flex-1">
+                            <span className="text-zinc-300 truncate">{d.name} <span className="text-zinc-600">({d.code})</span></span>
+                            {d.footnote && <span className="text-[10px] text-zinc-500 italic truncate" title={d.footnote}>{d.footnote}</span>}
+                          </div>
+                          <span className="font-bold text-emerald-400 shrink-0 mt-0.5">{d.qty} Unit x {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(d.price)}</span>
                         </div>
                       ))}
                     </div>
@@ -583,6 +586,7 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                                         <div className="flex-1 min-w-0 flex flex-col justify-center">
                                            <h5 className="font-bold text-sm text-zinc-100 truncate">{pItem.name}</h5>
                                            <p className="text-xs text-zinc-500">{pItem.code}</p>
+                                           {pItem.footnote && <p className="text-[10px] text-zinc-400 italic mt-0.5 truncate" title={pItem.footnote}>{pItem.footnote}</p>}
                                            {(pItem.returnedQty > 0) && (
                                               <p className="text-[10px] font-bold text-amber-500 mt-1 bg-amber-950/30 w-max px-1.5 py-0.5 rounded">Kembali: {pItem.returnedQty} / {pItem.qty}</p>
                                            )}
