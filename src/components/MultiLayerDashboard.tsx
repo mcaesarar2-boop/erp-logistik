@@ -156,6 +156,9 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
     if (sortBy === 'qty_highest') return qtyB - qtyA;
     if (sortBy === 'qty_lowest') return qtyA - qtyB;
     
+    if (sortBy === 'price_highest') return (b.price || 0) - (a.price || 0);
+    if (sortBy === 'price_lowest') return (a.price || 0) - (b.price || 0);
+    
     return 0;
   });
 
@@ -483,6 +486,8 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                 <option value="qty_lowest">Paling Sedikit</option>
                 <option value="date_modified_desc">Terbaru Diubah</option>
                 <option value="date_modified_asc">Terlama Diubah</option>
+                <option value="price_highest">Harga Tertinggi</option>
+                <option value="price_lowest">Harga Terendah</option>
               </select>
 
               {isAdmin && <AddCategoryDialog />}
