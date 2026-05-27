@@ -53,7 +53,7 @@ export function ReturnRentalDialog({ items, activeEvent }: ReturnRentalDialogPro
       .filter((p: any) => p.id && p.rentedQuantity > 0);
   })() : items.filter(i => i.rentedQuantity > 0);
 
-  const filteredItems = rentableItems.filter(item => 
+  const filteredItems = rentableItems.filter((item: any) => 
     item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     item.code.toLowerCase().includes(searchQuery.toLowerCase())
   )
@@ -158,7 +158,7 @@ export function ReturnRentalDialog({ items, activeEvent }: ReturnRentalDialogPro
               {showResults && searchQuery && (
                 <div className="absolute top-full mt-1 left-0 right-0 max-h-[150px] overflow-y-auto overflow-x-hidden bg-zinc-800 border border-zinc-700 rounded-md shadow-2xl z-50">
                 {filteredItems.length > 0 ? (
-                  filteredItems.map(item => (
+                  filteredItems.map((item: any) => (
                     <div key={item.id} className="p-3 hover:bg-zinc-700 cursor-pointer border-b border-zinc-700/50 flex justify-between items-center" onClick={() => addToCart(item)}>
                       <div><p className="text-sm font-bold text-zinc-200">{item.name}</p><p className="text-xs text-zinc-400">{item.code}</p></div>
                       <p className="text-xs font-medium text-amber-400">Sedang Keluar: {item.rentedQuantity}</p>
