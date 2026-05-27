@@ -93,6 +93,15 @@ export function EditPackageDialog({ pkg, items }: EditPackageDialogProps) {
     }))
   }
 
+  const updateFootnote = (id: string, newFootnote: string) => {
+    setCart(cart.map(c => {
+      if (c.id === id) {
+        return { ...c, footnote: newFootnote }
+      }
+      return c
+    }))
+  }
+
   async function handleSubmit(formData: FormData) {
     setErrorMsg(null)
     if (cart.length === 0) {
@@ -104,7 +113,7 @@ export function EditPackageDialog({ pkg, items }: EditPackageDialogProps) {
       return
     }
     
-    formData.append("payload", JSON.stringify(cart.map(c => ({ id: c.id, qty: c.qty, name: c.name, code: c.code, price: c.price, rentPercentage: c.rentPercentage }))))
+    formData.append("payload", JSON.stringify(cart.map(c => ({ id: c.id, qty: c.qty, name: c.name, code: c.code, price: c.price, rentPercentage: c.rentPercentage, footnote: c.footnote }))))
     const result = await updatePackageTemplate(pkg.id, formData)
     
     if (result?.success === false) {
@@ -173,13 +182,16 @@ export function EditPackageDialog({ pkg, items }: EditPackageDialogProps) {
                 {cart.map(item => {
                   const totalInventory = (item.quantity || 0) + (item.rentedQuantity || 0) + (item.maintenanceQuantity || 0);
                   return (
-                    <div key={item.id} className="bg-zinc-900 p-3 rounded-lg border border-zinc-800 flex justify-between items-center gap-2">
-                      <div className="flex-1"><p className="text-sm font-bold text-zinc-100">{item.name}</p><p className="text-xs text-zinc-500">{item.code} | Max: {totalInventory}</p></div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <Label className="text-xs">Qty:</Label>
-                        <Input type="number" min="1" max={totalInventory} value={item.qty} onChange={(e) => updateQty(item.id, parseInt(e.target.value)||1)} className="w-16 h-7 text-xs bg-zinc-950 border-zinc-700 text-center" />
+                    <div key={item.id} className="bg-zinc-900 p-3 rounded-lg border border-zinc-800 flex flex-col gap-2">
+                      <div className="flex justify-between items-center gap-2">
+                        <div className="flex-1"><p className="text-sm font-bold text-zinc-100">{item.name}</p><p className="text-xs text-zinc-500">{item.code} | Max: {totalInventory}</p></div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Label className="text-xs">Qty:</Label>
+                          <Input type="number" min="1" max={totalInventory} value={item.qty} onChange={(e) => updateQty(item.id, parseInt(e.target.value)||1)} className="w-16 h-7 text-xs bg-zinc-950 border-zinc-700 text-center" />
+                        </div>
+                        <button type="button" onClick={() => setCart(cart.filter(c => c.id !== item.id))} className="text-zinc-500 hover:text-red-400 p-1 bg-zinc-800 rounded shrink-0"><Trash2 className="w-4 h-4"/></button>
                       </div>
-                      <button type="button" onClick={() => setCart(cart.filter(c => c.id !== item.id))} className="text-zinc-500 hover:text-red-400 p-1 bg-zinc-800 rounded shrink-0"><Trash2 className="w-4 h-4"/></button>
+                      <Input placeholder="Catatan / Footnote (Opsional)" className="h-7 text-xs bg-zinc-950 border-zinc-800 text-zinc-300" value={item.footnote || ''} onChange={(e) => updateFootnote(item.id, e.target.value)} />
                     </div>
                   )
                 })}
