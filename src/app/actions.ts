@@ -82,19 +82,23 @@ export async function createItem(formData: FormData) {
         prefix = prefixes.join('-');
       }
       
-      const lastItem = await prisma.item.findFirst({
+      const itemsWithPrefix = await prisma.item.findMany({
         where: { code: { startsWith: `${prefix}-` } },
-        orderBy: { code: 'desc' }
+        select: { code: true }
       });
+      
       let nextSerial = 1;
-      if (lastItem) {
-        const parts = lastItem.code.split('-');
-        if (parts.length > 1) {
-          const lastNumber = parseInt(parts[parts.length - 1], 10);
-          if (!isNaN(lastNumber)) {
-            nextSerial = lastNumber + 1;
-          }
-        }
+      if (itemsWithPrefix.length > 0) {
+        const serials = itemsWithPrefix.map(item => {
+          const lastDashIndex = item.code.lastIndexOf('-');
+          if (lastDashIndex === -1) return 0;
+          const itemPrefix = item.code.substring(0, lastDashIndex);
+          if (itemPrefix !== prefix) return 0;
+          const num = parseInt(item.code.substring(lastDashIndex + 1), 10);
+          return isNaN(num) ? 0 : num;
+        });
+        const maxSerial = serials.reduce((max, val) => Math.max(max, val), 0);
+        nextSerial = maxSerial + 1;
       }
       code = `${prefix}-${nextSerial.toString().padStart(3, '0')}`;
     }
