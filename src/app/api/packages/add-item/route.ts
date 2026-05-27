@@ -44,6 +44,9 @@ export async function POST(req: Request) {
     if (existingIndex !== -1) {
       // PERBAIKAN: Gunakan "qty" agar cocok dengan EditPackageDialog & RentPackageDialog
       payload[existingIndex].qty = (payload[existingIndex].qty || 0) + quantity;
+      if (item.footnote) {
+        payload[existingIndex].footnote = item.footnote;
+      }
     } else {
       // PERBAIKAN: Gunakan "qty" saat push barang baru
       payload.push({ ...item, qty: quantity });

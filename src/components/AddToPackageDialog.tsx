@@ -25,6 +25,7 @@ export function AddToPackageDialog({
   const [selectedPackage, setSelectedPackage] = useState("");
   const [newPackageName, setNewPackageName] = useState("");
   const [quantity, setQuantity] = useState(1);
+  const [footnote, setFootnote] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
@@ -47,6 +48,7 @@ export function AddToPackageDialog({
             name: item.name,
             price: item.price || 0,
             rentPercentage: item.rentPercentage || 0,
+            footnote: footnote,
           },
         }),
       });
@@ -55,6 +57,7 @@ export function AddToPackageDialog({
         alert(mode === 'new' ? `Berhasil membuat paket ${newPackageName}!` : `Berhasil menambahkan ${item.name} ke paket!`);
         setIsOpen(false);
         setNewPackageName(""); // reset state agar form bersih pas dibuka lagi
+        setFootnote(""); // reset footnote
         router.refresh();
       } else {
         const err = await res.json();
@@ -158,6 +161,19 @@ export function AddToPackageDialog({
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-sm text-zinc-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                   value={quantity}
                   onChange={(e) => setQuantity(Number(e.target.value))}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-zinc-300 mb-1.5">
+                  Catatan / Footnote (Opsional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Contoh: Digunakan untuk area panggung utama"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-sm text-zinc-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                  value={footnote}
+                  onChange={(e) => setFootnote(e.target.value)}
                 />
               </div>
             </div>

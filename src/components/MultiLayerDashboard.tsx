@@ -392,8 +392,10 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                     </div>
 
                     <div className="bg-zinc-950/50 rounded-lg p-2 border border-zinc-800/50 max-h-40 overflow-y-auto mb-4 space-y-1">
-                      {packageItems.map((item: Item, idx: number) => (
-                        <div key={idx} className="flex justify-between items-center text-xs py-1.5 border-b border-zinc-800/50 last:border-0 gap-2">
+                      {packageItems.map((item: Item, idx: number) => {
+                        const pkgItemData = payloadData.find((p:any) => p.id === item.id);
+                        return (
+                        <div key={idx} className="flex justify-between items-start text-xs py-1.5 border-b border-zinc-800/50 last:border-0 gap-2">
                           <div className="flex items-center gap-2 flex-1 min-w-0">
                             {item.imageUrl ? (
                                <div 
@@ -408,11 +410,16 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                                   N/A
                                </div>
                             )}
-                            <span className="text-zinc-300 truncate">{item.name}</span>
+                            <div className="flex flex-col min-w-0 flex-1">
+                              <span className="text-zinc-300 truncate">{item.name}</span>
+                              {pkgItemData?.footnote && (
+                                <span className="text-[10px] text-zinc-500 italic truncate" title={pkgItemData.footnote}>{pkgItemData.footnote}</span>
+                              )}
+                            </div>
                           </div>
-                          <span className="font-bold text-zinc-400 shrink-0 bg-zinc-900 px-2 py-0.5 rounded">{payloadData.find((p:any) => p.id === item.id)?.qty || 0} Unit</span>
+                          <span className="font-bold text-zinc-400 shrink-0 bg-zinc-900 px-2 py-0.5 rounded mt-0.5">{pkgItemData?.qty || 0} Unit</span>
                         </div>
-                      ))}
+                      )})}
                     </div>
 
                     <div className="mt-auto pt-4 border-t border-zinc-800 flex justify-between items-center">
