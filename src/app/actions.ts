@@ -373,6 +373,10 @@ export async function returnBulkRental(formData: FormData) {
   try {
     await verifyAdmin();
     const payloadStr = formData.get("payload") as string;
+    const historyId = formData.get("historyId") as string | null;
+    const historyPayloadStr = formData.get("historyPayload") as string | null;
+    const historyDesc = formData.get("historyDesc") as string | null;
+    
     if (!payloadStr) return { success: false, error: "Data kosong." };
     
     const payload = JSON.parse(payloadStr) as { id: string; qty: number }[];
@@ -387,6 +391,19 @@ export async function returnBulkRental(formData: FormData) {
           where: { id: item.id },
           data: { quantity: dbItem.quantity + item.qty, rentedQuantity: dbItem.rentedQuantity - item.qty }
         });
+      }
+
+      // Jika pengembalian ini terkait dengan Event (History), perbarui status qty event tersebut
+      if (historyId) {
+        const updateData: any = {};
+        if (historyPayloadStr) updateData.payload = historyPayloadStr;
+        if (historyDesc) updateData.description = historyDesc;
+        if (Object.keys(updateData).length > 0) {
+          await tx.history.update({
+            where: { id: historyId },
+            data: updateData
+          });
+        }
       }
     });
     revalidatePath("/");

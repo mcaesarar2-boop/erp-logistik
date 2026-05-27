@@ -6,9 +6,9 @@ import { DeleteItemDialog } from "@/components/DeleteItemDialog";
 import { AddCategoryDialog } from "@/components/AddCategoryDialog";
 import { EditCategoryDialog } from "@/components/EditCategoryDialog"; 
 import { DeleteCategoryDialog } from "@/components/DeleteCategoryDialog";
-import { Search, ArrowUpDown, History as HistoryIcon, Calendar, Trash2, Pencil, Loader2, Printer, PackageSearch } from "lucide-react";
+import { Search, ArrowUpDown, History as HistoryIcon, Calendar, Trash2, Pencil, Loader2, Printer, PackageSearch, Eye } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogTrigger, DialogHeader } from "@/components/ui/dialog";
 import { RentalInvoiceDialog } from "@/components/RentalInvoiceDialog";
 import { ReturnRentalDialog } from "@/components/ReturnRentalDialog";
 import { ReprintInvoiceDialog } from "@/components/ReprintInvoiceDialog";
@@ -168,6 +168,13 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
   const availableUnits = items.reduce((acc, item) => acc + item.quantity, 0);
   const rentedUnits = items.reduce((acc, item) => acc + item.rentedQuantity, 0);
   const maintenanceUnits = items.reduce((acc, item) => acc + item.maintenanceQuantity, 0);
+
+  // --- Active Events Logic ---
+  const activeEvents = histories.filter(h => 
+    h.type === 'INVOICE_RENTAL' && 
+    h.description?.includes('Event:') && 
+    !h.description?.includes('[SELESAI]')
+  );
   
   const totalValuation = items.reduce((acc, item) => {
     const totalQty = item.quantity + item.rentedQuantity + item.maintenanceQuantity;
@@ -510,6 +517,91 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
               )}
             </div>
           </div>
+
+          {/* Tampilan Khusus Grouping Event di Tab Rented */}
+          {activeLayer === 'rented' && activeEvents.length > 0 && (
+            <div className="mb-10 space-y-4">
+              <h3 className="text-lg font-bold text-zinc-100 flex items-center gap-2 border-b border-zinc-800 pb-2"><Calendar className="w-5 h-5 text-amber-400" /> Daftar Event / Acara Aktif</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {activeEvents.map(event => {
+                  const payload = event.payload ? JSON.parse(event.payload) : [];
+                  const activeItems = payload.filter((p: any) => (p.qty - (p.returnedQty || 0)) > 0);
+                  if (activeItems.length === 0) return null; // Fallback aman
+
+                  return (
+                    <div key={event.id} className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-5 flex flex-col shadow-sm group relative">
+                      <h4 className="font-bold text-amber-400 mb-1 line-clamp-1" title={event.description || ""}>{event.description?.split('|')[0].replace('Event:', '').trim()}</h4>
+                      <p className="text-xs text-zinc-500 mb-4">{new Date(event.date).toLocaleDateString('id-ID', { dateStyle: 'full' })}</p>
+                      
+                      <div className="flex-1 bg-zinc-950/50 rounded-lg p-3 border border-zinc-800/50 mb-4 max-h-32 overflow-y-auto space-y-2">
+                        {activeItems.map((p: any, idx: number) => (
+                          <div key={idx} className="flex justify-between items-center text-xs border-b border-zinc-800/50 pb-1.5 last:border-0 last:pb-0">
+                            <span className="text-zinc-300 truncate pr-2 flex-1">{p.name}</span>
+                            <span className="text-amber-400 font-bold shrink-0 bg-amber-950/30 px-2 py-0.5 rounded">{p.qty - (p.returnedQty || 0)} Unit</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="mt-auto flex flex-col xl:flex-row gap-2">
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <button className="w-full xl:flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-1.5 rounded-md transition-colors border border-zinc-700 flex items-center justify-center shrink-0 text-sm font-medium gap-2 shadow-sm">
+                               <Eye className="w-4 h-4" /> <span className="inline">Rincian</span>
+                            </button>
+                          </DialogTrigger>
+                          <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-50 max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+                             <DialogHeader className="shrink-0 border-b border-zinc-800 pb-4">
+                               <DialogTitle>
+                                 Rincian Event: <span className="text-amber-400">{event.description?.split('|')[0].replace('Event:', '').trim()}</span>
+                               </DialogTitle>
+                             </DialogHeader>
+                             <div className="flex-1 overflow-y-auto space-y-3 pr-2 py-2">
+                               {payload.map((pItem: any, idx: number) => {
+                                  const realItem = items.find(i => i.id === pItem.id || i.code === pItem.code);
+                                  return (
+                                     <div key={idx} className="flex gap-4 p-3 bg-zinc-900/50 border border-zinc-800 rounded-lg items-center">
+                                        <div className="w-16 h-16 shrink-0 bg-zinc-950 border border-zinc-800 rounded-md overflow-hidden flex items-center justify-center">
+                                           {realItem?.imageUrl ? (
+                                              <img src={realItem.imageUrl} alt={pItem.name} className="w-full h-full object-cover" />
+                                           ) : (
+                                              <span className="text-[10px] text-zinc-600 font-bold">NO IMG</span>
+                                           )}
+                                        </div>
+                                        <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                           <h5 className="font-bold text-sm text-zinc-100 truncate">{pItem.name}</h5>
+                                           <p className="text-xs text-zinc-500">{pItem.code}</p>
+                                           {(pItem.returnedQty > 0) && (
+                                              <p className="text-[10px] font-bold text-amber-500 mt-1 bg-amber-950/30 w-max px-1.5 py-0.5 rounded">Kembali: {pItem.returnedQty} / {pItem.qty}</p>
+                                           )}
+                                        </div>
+                                        <div className="text-right shrink-0 flex flex-col justify-center">
+                                           <p className="text-xs text-zinc-400 mb-0.5">{pItem.qty} Unit × {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(pItem.price)}</p>
+                                           <p className="font-bold text-sm text-emerald-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(pItem.qty * pItem.price)}</p>
+                                        </div>
+                                     </div>
+                                  )
+                               })}
+                             </div>
+                             <div className="shrink-0 mt-2 pt-4 border-t border-zinc-800 flex justify-between items-center bg-zinc-900/40 p-4 rounded-xl border">
+                               <span className="text-sm font-medium text-zinc-400">Total Harga Sewa Keseluruhan:</span>
+                               <span className="text-xl font-bold text-emerald-400">
+                                 {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(payload.reduce((acc: number, cur: any) => acc + (cur.qty * cur.price), 0))}
+                               </span>
+                             </div>
+                          </DialogContent>
+                        </Dialog>
+                        <div className="w-full xl:flex-1 flex [&_button]:w-full">
+                          <ReturnRentalDialog items={itemsToDisplay} activeEvent={event} />
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {activeLayer === 'rented' && <h3 className="text-lg font-bold text-zinc-100 flex items-center gap-2 border-b border-zinc-800 pb-2 mb-4 mt-6">Akumulasi Seluruh Barang Keluar (Flat List)</h3>}
 
           {/* Render Tabel/List Data Barang */}
           {itemsToDisplay.length > 0 ? (

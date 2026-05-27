@@ -16,9 +16,10 @@ interface ReturnRentalDialogProps {
     code: string
     rentedQuantity: number
   }[]
+  activeEvent?: any
 }
 
-export function ReturnRentalDialog({ items }: ReturnRentalDialogProps) {
+export function ReturnRentalDialog({ items, activeEvent }: ReturnRentalDialogProps) {
   const [open, setOpen] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   
@@ -34,10 +35,25 @@ export function ReturnRentalDialog({ items }: ReturnRentalDialogProps) {
     })
   }, [])
 
-  // Hanya tampilkan barang yang sedang disewakan
-  const rentedItems = items.filter(i => i.rentedQuantity > 0)
+  // Tentukan item apa saja yang bisa dikembalikan (Jika activeEvent ada, batasi ke event tersebut)
+  const rentableItems = activeEvent ? (() => {
+    const payload = JSON.parse(activeEvent.payload || "[]");
+    return payload
+      .filter((p: any) => (p.qty - (p.returnedQty || 0)) > 0)
+      .map((p: any) => {
+        const realItem = items.find(i => i.id === p.id || i.code === p.code);
+        return {
+          ...p,
+          id: p.id || realItem?.id,
+          name: p.name || realItem?.name,
+          code: p.code || realItem?.code,
+          rentedQuantity: Math.min((p.qty - (p.returnedQty || 0)), realItem?.rentedQuantity || 0) // Tidak bisa kembali lebih dari yang riil di gudang
+        }
+      })
+      .filter((p: any) => p.id && p.rentedQuantity > 0);
+  })() : items.filter(i => i.rentedQuantity > 0);
 
-  const filteredItems = rentedItems.filter(item => 
+  const filteredItems = rentableItems.filter(item => 
     item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     item.code.toLowerCase().includes(searchQuery.toLowerCase())
   )
@@ -52,7 +68,7 @@ export function ReturnRentalDialog({ items }: ReturnRentalDialogProps) {
   }
 
   const addAllToCart = () => {
-    setCart(rentedItems.map(item => ({ ...item, qty: item.rentedQuantity })))
+    setCart(rentableItems.map((item: any) => ({ ...item, qty: item.rentedQuantity })))
     setSearchQuery("")
     setShowResults(false)
   }
@@ -69,6 +85,27 @@ export function ReturnRentalDialog({ items }: ReturnRentalDialogProps) {
     }
     
     formData.append("payload", JSON.stringify(cart.map(c => ({ id: c.id, qty: c.qty }))))
+    
+    // Jika ada activeEvent, update history payload agar mencatat sisa pengembalian
+    if (activeEvent) {
+      formData.append("historyId", activeEvent.id);
+      const currentPayload = JSON.parse(activeEvent.payload || "[]");
+      const newPayload = currentPayload.map((p: any) => {
+        const returnedItem = cart.find(c => c.id === p.id || c.code === p.code);
+        if (returnedItem) {
+          return { ...p, returnedQty: (p.returnedQty || 0) + returnedItem.qty };
+        }
+        return p;
+      });
+      formData.append("historyPayload", JSON.stringify(newPayload));
+      
+      // Cek otomatis apakah semua barang pada event ini sudah dikembalikan?
+      const isAllReturned = newPayload.every((p: any) => (p.returnedQty || 0) >= p.qty);
+      if (isAllReturned) {
+        formData.append("historyDesc", activeEvent.description + " [SELESAI]");
+      }
+    }
+
     const result = await returnBulkRental(formData)
     
     if (result?.success === false) {
@@ -86,13 +123,13 @@ export function ReturnRentalDialog({ items }: ReturnRentalDialogProps) {
       <DialogTrigger asChild>
         <button className="w-full sm:w-auto bg-blue-950/50 hover:bg-blue-900 text-blue-400 px-3 py-1.5 rounded-md transition-colors border border-blue-900 flex items-center justify-center shrink-0 text-sm font-medium gap-2 shadow-sm">
           <Undo2 className="w-4 h-4" />
-          <span className="inline">Kembalikan Aset</span>
+          <span className="inline">{activeEvent ? "Kembalikan Event Ini" : "Kembalikan Aset"}</span>
         </button>
       </DialogTrigger>
       <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-50 flex flex-col max-h-[90vh] overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-blue-400">
-            <Undo2 className="w-5 h-5" /> Form Pengembalian Aset (Rental)
+            <Undo2 className="w-5 h-5" /> {activeEvent ? "Pengembalian Aset Event" : "Form Pengembalian Aset (Rental)"}
           </DialogTitle>
         </DialogHeader>
         {errorMsg && (
@@ -104,8 +141,8 @@ export function ReturnRentalDialog({ items }: ReturnRentalDialogProps) {
         <form action={handleSubmit} className="flex flex-col gap-4 pt-2 flex-1 overflow-hidden">
           <div className="space-y-2 shrink-0">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-0">
-              <Label>Cari Aset yang Sedang Disewa</Label>
-              {rentedItems.length > 0 && (
+              <Label>{activeEvent ? "Daftar Aset di Event Ini" : "Cari Aset yang Sedang Disewa"}</Label>
+              {rentableItems.length > 0 && (
                 <button 
                   type="button" 
                   onClick={addAllToCart}

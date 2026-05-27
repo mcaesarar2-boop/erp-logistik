@@ -39,6 +39,7 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [discountPercentage, setDiscountPercentage] = useState<number>(0)
   const [discountDesc, setDiscountDesc] = useState<string>("")
+  const [eventName, setEventName] = useState<string>("")
 
   const [isAdmin, setIsAdmin] = useState(false)
   useEffect(() => {
@@ -156,6 +157,9 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
     
     const totalQty = cart.reduce((acc: number, i: any) => acc + i.qty, 0)
     let historyDesc = `Rental Masal (${totalQty} Unit Aset)`
+    if (eventName.trim() !== "") {
+      historyDesc = `Event: ${eventName.trim()} | ` + historyDesc
+    }
     if (discountPercentage > 0) {
       historyDesc += ` - Diskon ${discountPercentage}%`
       if (discountDesc.trim() !== "") {
@@ -165,9 +169,11 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
     historyFormData.append("description", historyDesc)
     
     const historyPayload = cart.map((c: any) => ({
+      id: c.id,
       name: c.name,
       code: c.code,
       qty: c.qty,
+      returnedQty: 0,
       price: (((c.price || 0) * (c.rentPercentage || 0)) / 100) * (1 - (discountPercentage / 100))
     }))
     historyFormData.append("payload", JSON.stringify(historyPayload))
@@ -180,6 +186,7 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
     setWarningMsg(null)
     setDiscountPercentage(0)
     setDiscountDesc("")
+    setEventName("")
   }
 
   const subTotal = cart.reduce((acc, item) => acc + (item.qty * ((item.price || 0) * (item.rentPercentage || 0) / 100)), 0)
@@ -189,7 +196,7 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
   if (!isAdmin) return null;
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) { setErrorMsg(null); setWarningMsg(null); setCart([]); setSelectedPackageId(""); setDiscountPercentage(0); setDiscountDesc(""); }}}>
+    <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) { setErrorMsg(null); setWarningMsg(null); setCart([]); setSelectedPackageId(""); setDiscountPercentage(0); setDiscountDesc(""); setEventName(""); }}}>
       <DialogTrigger asChild>
         <Button className="w-full sm:w-auto shrink-0 bg-emerald-950/50 border border-emerald-900 text-emerald-400 hover:bg-emerald-900 hover:text-emerald-50">
           <ShoppingCart className="w-4 h-4 mr-2" /> Tambah Rental
@@ -213,6 +220,11 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
         )}
 
         <form action={handleSubmit} className="flex flex-col gap-4 pt-2 flex-1 overflow-hidden">
+          <div className="space-y-2 shrink-0">
+            <Label>Nama Event / Acara (Opsional)</Label>
+            <Input placeholder="Misal: Konser Dewa 19" value={eventName} onChange={(e) => setEventName(e.target.value)} className="bg-zinc-900 border-zinc-800" />
+          </div>
+
           {packages.length > 0 && (
             <div className="space-y-2 shrink-0 bg-zinc-900/50 p-3 rounded-lg border border-zinc-800">
               <Label className="flex items-center gap-2"><PackageOpen className="w-4 h-4 text-emerald-500"/> Gunakan Template Paket</Label>

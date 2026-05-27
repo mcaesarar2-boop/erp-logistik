@@ -30,6 +30,7 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [discountPercentage, setDiscountPercentage] = useState<number>(0)
   const [discountDesc, setDiscountDesc] = useState<string>("")
+  const [eventName, setEventName] = useState<string>("")
 
   const [isAdmin, setIsAdmin] = useState(false)
   useEffect(() => {
@@ -89,6 +90,9 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
     
     const totalQty = payloadData.reduce((acc: number, i: any) => acc + i.qty, 0)
     let historyDesc = `Rental Paket: ${pkg.name} (${totalQty} Unit Aset)`
+    if (eventName.trim() !== "") {
+      historyDesc = `Event: ${eventName.trim()} | ` + historyDesc
+    }
     if (discountPercentage > 0) {
       historyDesc += ` - Diskon ${discountPercentage}%`
       if (discountDesc.trim() !== "") {
@@ -101,9 +105,11 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
       const itemDetail = items.find(i => i.id === pItem.id);
       const rentPricePerItem = itemDetail ? ((itemDetail.price || 0) * (itemDetail.rentPercentage || 0)) / 100 : 0;
       return {
+        id: pItem.id,
         name: pItem.name,
         code: pItem.code,
         qty: pItem.qty,
+        returnedQty: 0,
         price: rentPricePerItem * (1 - (discountPercentage / 100))
       }
     })
@@ -117,7 +123,7 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
   if (!isAdmin) return null;
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) { setErrorMsg(null); setDiscountPercentage(0); setDiscountDesc(""); } }}>
+    <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) { setErrorMsg(null); setDiscountPercentage(0); setDiscountDesc(""); setEventName(""); } }}>
       <DialogTrigger asChild>
         <button className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center shadow-md hover:shadow-emerald-900/50">
           <ShoppingCart className="w-4 h-4 mr-2" /> Sewa
@@ -130,6 +136,11 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
         {!isAvailable && <div className="bg-red-950/50 border border-red-900 text-red-400 text-sm p-3 rounded-md flex items-start gap-2"><AlertCircle className="w-4 h-4 shrink-0 mt-0.5" /><span><strong className="block mb-0.5">Tidak bisa disewa:</strong> {unavailableReason}</span></div>}
 
         <div className="flex-1 overflow-y-auto pr-2 space-y-4 pt-2">
+          <div className="space-y-2">
+            <span className="text-sm font-medium text-zinc-300">Nama Event / Acara (Opsional)</span>
+            <Input type="text" placeholder="Misal: Pensi SMA 1" value={eventName} onChange={(e) => setEventName(e.target.value)} className="bg-zinc-900 border-zinc-800" />
+          </div>
+
           <div className="bg-zinc-900/50 p-4 rounded-xl border border-zinc-800">
             <h3 className="font-bold text-lg text-blue-400 mb-1">{pkg.name}</h3>
             <p className="text-sm text-zinc-400 mb-4">Rincian aset yang akan dikeluarkan dari gudang:</p>
