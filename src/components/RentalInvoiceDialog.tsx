@@ -5,6 +5,7 @@ import { useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Receipt, Printer, Loader2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { createHistory } from "@/app/actions"
 
 interface Item {
@@ -24,29 +25,42 @@ export function RentalInvoiceDialog({ items }: RentalInvoiceDialogProps) {
   const [open, setOpen] = useState(false)
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0])
   const [isSaving, setIsSaving] = useState(false)
+  const [discountPercentage, setDiscountPercentage] = useState<number>(0)
+  const [discountDesc, setDiscountDesc] = useState<string>("")
 
   // Pastikan hanya memproses aset yang sedang keluar/disewa
   const rentedItems = items.filter(i => i.rentedQuantity > 0)
 
   // Hitung total dari keseluruhan item yang dirental
-  const grandTotal = rentedItems.reduce((acc, item) => {
+  const subTotal = rentedItems.reduce((acc, item) => {
     const rentPricePerItem = ((item.price || 0) * (item.rentPercentage || 0)) / 100
     return acc + (item.rentedQuantity * rentPricePerItem)
   }, 0)
+
+  const discountAmount = subTotal * (discountPercentage / 100)
+  const grandTotal = subTotal - discountAmount
 
   const handlePrintAndSave = async () => {
     setIsSaving(true)
     const formData = new FormData()
     formData.append("type", "INVOICE_RENTAL")
     formData.append("date", invoiceDate)
-    formData.append("description", `Cetak Invoice Rental (${rentedItems.reduce((acc, i) => acc + i.rentedQuantity, 0)} Unit Aset)`)
+    
+    let historyDesc = `Cetak Invoice Rental (${rentedItems.reduce((acc, i) => acc + i.rentedQuantity, 0)} Unit Aset)`
+    if (discountPercentage > 0) {
+      historyDesc += ` - Diskon ${discountPercentage}%`
+      if (discountDesc.trim() !== "") {
+        historyDesc += ` (${discountDesc.trim()})`
+      }
+    }
+    formData.append("description", historyDesc)
     
     // Simpan snapshot nama, qty, dan harga pada waktu dicetak
     const payload = rentedItems.map(i => ({
       name: i.name, 
       code: i.code, 
       qty: i.rentedQuantity, 
-      price: ((i.price || 0) * (i.rentPercentage || 0)) / 100
+      price: (((i.price || 0) * (i.rentPercentage || 0)) / 100) * (1 - (discountPercentage / 100))
     }))
     formData.append("payload", JSON.stringify(payload))
 
@@ -58,7 +72,7 @@ export function RentalInvoiceDialog({ items }: RentalInvoiceDialogProps) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) setInvoiceDate(new Date().toISOString().split('T')[0]) }}>
+    <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) { setInvoiceDate(new Date().toISOString().split('T')[0]); setDiscountPercentage(0); setDiscountDesc(""); } }}>
       <DialogTrigger asChild>
         <button className="w-full sm:w-auto bg-emerald-950/50 hover:bg-emerald-900 text-emerald-400 px-3 py-1.5 rounded-md transition-colors border border-emerald-900 flex items-center justify-center shrink-0 text-sm font-medium gap-2 shadow-sm">
           <Receipt className="w-4 h-4" />
@@ -103,6 +117,7 @@ export function RentalInvoiceDialog({ items }: RentalInvoiceDialogProps) {
             <div className="space-y-3">
               {rentedItems.map(item => {
                 const rentPricePerItem = ((item.price || 0) * (item.rentPercentage || 0)) / 100;
+                // Diskon belum diterapkan di list ini, hanya di subtotal & total
                 const totalItemRent = rentPricePerItem * item.rentedQuantity;
                 return (
                   <div key={item.id} className="bg-zinc-900/50 print:bg-transparent border border-zinc-800 print:border-b print:border-zinc-300 print:border-x-0 print:border-t-0 p-3 rounded-lg print:rounded-none flex justify-between items-center gap-4">
@@ -126,14 +141,35 @@ export function RentalInvoiceDialog({ items }: RentalInvoiceDialogProps) {
         </div>
         
         <div className="border-t border-zinc-800 print:border-zinc-300 pt-4 pb-2 mt-auto">
-          <div className="bg-zinc-900 print:bg-transparent border border-zinc-800 print:border-none rounded-lg p-4 flex justify-between items-center mb-4">
-            <div>
-              <p className="text-sm font-medium text-zinc-400 print:text-zinc-600">Total Nilai Sewa Aktif</p>
-              <p className="text-xs text-zinc-500 print:text-zinc-500 mt-0.5">Dari {rentedItems.reduce((acc, i) => acc + i.rentedQuantity, 0)} Unit Aset</p>
+          <div className="bg-zinc-900 print:bg-transparent border border-zinc-800 print:border-none rounded-lg p-4 flex flex-col gap-2 mb-4">
+            <div className="flex justify-between items-center text-sm text-zinc-400 print:text-zinc-600">
+              <span>Subtotal (Dari {rentedItems.reduce((acc, i) => acc + i.rentedQuantity, 0)} Unit Aset):</span>
+              <span>{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(subTotal)}</span>
             </div>
-            <p className="text-2xl font-bold text-emerald-400 print:text-black">
-              {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(grandTotal)}
-            </p>
+            
+            <div className="flex justify-between items-center print:hidden">
+              <Label className="text-zinc-300">Diskon Keseluruhan (%)</Label>
+              <Input type="number" min="0" max="100" value={discountPercentage} onChange={(e) => setDiscountPercentage(parseFloat(e.target.value) || 0)} className="w-20 h-8 text-right text-xs bg-zinc-950 border-zinc-800" />
+            </div>
+            {discountPercentage > 0 && (
+              <>
+                <div className="flex justify-between items-center print:hidden">
+                  <Label className="text-zinc-300">Keterangan Diskon</Label>
+                  <Input type="text" placeholder="Misal: Promo Event Tahunan" value={discountDesc} onChange={(e) => setDiscountDesc(e.target.value)} className="w-48 h-8 text-xs bg-zinc-950 border-zinc-800" />
+                </div>
+                <div className="flex justify-between items-center text-sm text-amber-400 print:text-black">
+                  <span>Potongan Diskon ({discountPercentage}%){discountDesc.trim() !== "" ? ` - ${discountDesc}` : ""}</span>
+                  <span>-{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(discountAmount)}</span>
+                </div>
+              </>
+            )}
+            
+            <div className="flex justify-between items-center pt-2 border-t border-zinc-800/50 print:border-zinc-300 mt-1">
+              <p className="text-sm font-bold text-zinc-300 print:text-black">Total Nilai Sewa Aktif</p>
+              <p className="text-2xl font-bold text-emerald-400 print:text-black">
+                {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(grandTotal)}
+              </p>
+            </div>
           </div>
 
           {/* Tombol Aksi (Print hidden) */}

@@ -32,10 +32,31 @@ export function ReprintInvoiceDialog({ history, children }: ReprintInvoiceDialog
   // Parse payload dari catatan riwayat
   const invoiceItems: PayloadItem[] = history.payload ? JSON.parse(history.payload) : []
   
+  let discountPercentage = 0
+  let discountDesc = ""
+
+  if (history.description) {
+    // Cerdas mem-parsing deskripsi diskon yang tercatat di server tanpa membebani database
+    const discountMatch = history.description.match(/- Diskon (\d+(?:\.\d+)?)%(?:\s*\((.*?)\))?/);
+    if (discountMatch) {
+      discountPercentage = parseFloat(discountMatch[1]);
+      if (discountMatch[2]) {
+        discountDesc = discountMatch[2];
+      }
+    }
+  }
+
   // Hitung grand total dari payload yang sudah tersimpan
   const grandTotal = invoiceItems.reduce((acc, item) => {
     return acc + (item.qty * item.price)
   }, 0)
+
+  let subTotal = grandTotal;
+  let discountAmount = 0;
+  if (discountPercentage > 0 && discountPercentage < 100) {
+    subTotal = grandTotal / (1 - (discountPercentage / 100));
+    discountAmount = subTotal - grandTotal;
+  }
 
   const handlePrint = () => {
     // Cukup panggil fungsi print bawaan browser
@@ -56,6 +77,9 @@ export function ReprintInvoiceDialog({ history, children }: ReprintInvoiceDialog
               CETAK ULANG INVOICE
             </DialogTitle>
             <p className="text-sm text-zinc-500 print:text-zinc-600 mt-1">Sistem ERP Logistik Enterprise</p>
+            {history.description && (
+              <p className="text-sm font-medium text-amber-400 print:text-black mt-2">{history.description}</p>
+            )}
           </div>
           
           {/* Tampilkan tanggal statis dari catatan riwayat */}
@@ -74,7 +98,8 @@ export function ReprintInvoiceDialog({ history, children }: ReprintInvoiceDialog
           ) : (
             <div className="space-y-3">
               {invoiceItems.map((item, index) => {
-                const totalItemRent = item.price * item.qty;
+                // Kalkulasi mundur (reconstruct) untuk mendapatkan harga aslinya sebelum didiskon di kertas Invoice
+                const originalPricePerItem = (discountPercentage > 0 && discountPercentage < 100) ? item.price / (1 - (discountPercentage / 100)) : item.price;
                 return (
                   <div key={index} className="bg-zinc-900/50 print:bg-transparent border border-zinc-800 print:border-b print:border-zinc-300 print:border-x-0 print:border-t-0 p-3 rounded-lg print:rounded-none flex justify-between items-center gap-4">
                     <div className="min-w-0 flex-1">
@@ -83,10 +108,10 @@ export function ReprintInvoiceDialog({ history, children }: ReprintInvoiceDialog
                     </div>
                     <div className="text-right shrink-0">
                       <div className="text-xs text-zinc-400 print:text-zinc-600 mb-0.5">
-                        {item.qty} Unit × {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.price)}
+                        {item.qty} Unit × {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(originalPricePerItem)}
                       </div>
                       <p className="font-bold text-sm text-emerald-400 print:text-black">
-                        {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(totalItemRent)}
+                        {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(originalPricePerItem * item.qty)}
                       </p>
                     </div>
                   </div>
@@ -97,14 +122,25 @@ export function ReprintInvoiceDialog({ history, children }: ReprintInvoiceDialog
         </div>
         
         <div className="border-t border-zinc-800 print:border-zinc-300 pt-4 pb-2 mt-auto">
-          <div className="bg-zinc-900 print:bg-transparent border border-zinc-800 print:border-none rounded-lg p-4 flex justify-between items-center mb-4">
-            <div>
-              <p className="text-sm font-medium text-zinc-400 print:text-zinc-600">Total Nilai Sewa</p>
-              <p className="text-xs text-zinc-500 print:text-zinc-500 mt-0.5">Dari {invoiceItems.reduce((acc, i) => acc + i.qty, 0)} Unit Aset</p>
+          <div className="bg-zinc-900 print:bg-transparent border border-zinc-800 print:border-none rounded-lg p-4 flex flex-col gap-2 mb-4">
+            <div className="flex justify-between items-center text-sm text-zinc-400 print:text-zinc-600">
+              <span>Subtotal (Dari {invoiceItems.reduce((acc, i) => acc + i.qty, 0)} Unit Aset):</span>
+              <span>{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(subTotal)}</span>
             </div>
-            <p className="text-2xl font-bold text-emerald-400 print:text-black">
-              {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(grandTotal)}
-            </p>
+            
+            {discountPercentage > 0 && (
+              <div className="flex justify-between items-center text-sm text-amber-400 print:text-black">
+                <span>Potongan Diskon ({discountPercentage}%){discountDesc.trim() !== "" ? ` - ${discountDesc}` : ""}</span>
+                <span>-{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(discountAmount)}</span>
+              </div>
+            )}
+
+            <div className="flex justify-between items-center pt-2 border-t border-zinc-800/50 print:border-zinc-300 mt-1">
+              <p className="text-sm font-bold text-zinc-300 print:text-black">Total Nilai Sewa</p>
+              <p className="text-2xl font-bold text-emerald-400 print:text-black">
+                {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(grandTotal)}
+              </p>
+            </div>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 print:hidden">

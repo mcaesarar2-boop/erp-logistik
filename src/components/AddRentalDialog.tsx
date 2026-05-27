@@ -37,6 +37,8 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
   const [selectedPackageId, setSelectedPackageId] = useState<string>("")
   const [isDeletingPkg, setIsDeletingPkg] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [discountPercentage, setDiscountPercentage] = useState<number>(0)
+  const [discountDesc, setDiscountDesc] = useState<string>("")
 
   const [isAdmin, setIsAdmin] = useState(false)
   useEffect(() => {
@@ -153,13 +155,20 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
     historyFormData.append("date", new Date().toISOString().split('T')[0])
     
     const totalQty = cart.reduce((acc: number, i: any) => acc + i.qty, 0)
-    historyFormData.append("description", `Rental Masal (${totalQty} Unit Aset)`)
+    let historyDesc = `Rental Masal (${totalQty} Unit Aset)`
+    if (discountPercentage > 0) {
+      historyDesc += ` - Diskon ${discountPercentage}%`
+      if (discountDesc.trim() !== "") {
+        historyDesc += ` (${discountDesc.trim()})`
+      }
+    }
+    historyFormData.append("description", historyDesc)
     
     const historyPayload = cart.map((c: any) => ({
       name: c.name,
       code: c.code,
       qty: c.qty,
-      price: ((c.price || 0) * (c.rentPercentage || 0)) / 100
+      price: (((c.price || 0) * (c.rentPercentage || 0)) / 100) * (1 - (discountPercentage / 100))
     }))
     historyFormData.append("payload", JSON.stringify(historyPayload))
     await createHistory(historyFormData)
@@ -169,14 +178,18 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
     setCart([]) // Reset state
     setSelectedPackageId("")
     setWarningMsg(null)
+    setDiscountPercentage(0)
+    setDiscountDesc("")
   }
 
-  const grandTotal = cart.reduce((acc, item) => acc + (item.qty * ((item.price || 0) * (item.rentPercentage || 0) / 100)), 0)
+  const subTotal = cart.reduce((acc, item) => acc + (item.qty * ((item.price || 0) * (item.rentPercentage || 0) / 100)), 0)
+  const discountAmount = subTotal * (discountPercentage / 100)
+  const grandTotal = subTotal - discountAmount
 
   if (!isAdmin) return null;
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) { setErrorMsg(null); setWarningMsg(null); setCart([]); setSelectedPackageId(""); }}}>
+    <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) { setErrorMsg(null); setWarningMsg(null); setCart([]); setSelectedPackageId(""); setDiscountPercentage(0); setDiscountDesc(""); }}}>
       <DialogTrigger asChild>
         <Button className="w-full sm:w-auto shrink-0 bg-emerald-950/50 border border-emerald-900 text-emerald-400 hover:bg-emerald-900 hover:text-emerald-50">
           <ShoppingCart className="w-4 h-4 mr-2" /> Tambah Rental
@@ -271,8 +284,31 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
             )}
           </div>
           {cart.length > 0 && (
-            <div className="mt-2 p-4 bg-zinc-950 border border-zinc-800 rounded-lg flex justify-between items-center shrink-0">
-              <span className="text-sm text-zinc-400">Total Tagihan Sewa:</span><span className="text-lg font-bold text-emerald-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(grandTotal)}</span>
+            <div className="mt-2 p-4 bg-zinc-950 border border-zinc-800 rounded-lg flex flex-col gap-2 shrink-0">
+              <div className="flex justify-between items-center text-sm text-zinc-400">
+                <span>Subtotal:</span>
+                <span>{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(subTotal)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <Label className="text-zinc-300">Diskon Keseluruhan (%)</Label>
+                <Input type="number" min="0" max="100" value={discountPercentage} onChange={(e) => setDiscountPercentage(parseFloat(e.target.value) || 0)} className="w-20 h-8 text-right text-xs bg-zinc-900 border-zinc-700" />
+              </div>
+              {discountPercentage > 0 && (
+                <>
+                  <div className="flex justify-between items-center">
+                    <Label className="text-zinc-300">Keterangan Diskon</Label>
+                    <Input type="text" placeholder="Misal: Promo Event Tahunan" value={discountDesc} onChange={(e) => setDiscountDesc(e.target.value)} className="w-48 h-8 text-xs bg-zinc-900 border-zinc-700" />
+                  </div>
+                  <div className="flex justify-between items-center text-sm text-amber-400">
+                    <span>Potongan Diskon:</span>
+                    <span>-{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(discountAmount)}</span>
+                  </div>
+                </>
+              )}
+              <div className="flex justify-between items-center pt-2 border-t border-zinc-800/50 mt-1">
+                <span className="text-sm font-bold text-zinc-300">Total Tagihan Sewa:</span>
+                <span className="text-lg font-bold text-emerald-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(grandTotal)}</span>
+              </div>
             </div>
           )}
           <Button type="submit" disabled={cart.length === 0 || isSubmitting} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 mt-2">

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { addBulkRental, createHistory } from "@/app/actions"
@@ -27,6 +28,8 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
   const [open, setOpen] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [discountPercentage, setDiscountPercentage] = useState<number>(0)
+  const [discountDesc, setDiscountDesc] = useState<string>("")
 
   const [isAdmin, setIsAdmin] = useState(false)
   useEffect(() => {
@@ -55,12 +58,15 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
     }
   }
 
-  const grandTotal = payloadData.reduce((acc: number, pItem: any) => {
+  const subTotal = payloadData.reduce((acc: number, pItem: any) => {
     const itemDetail = items.find(i => i.id === pItem.id);
     if (!itemDetail) return acc;
     const rentPrice = ((itemDetail.price || 0) * (itemDetail.rentPercentage || 0)) / 100;
     return acc + (rentPrice * pItem.qty);
   }, 0);
+
+  const discountAmount = subTotal * (discountPercentage / 100);
+  const grandTotal = subTotal - discountAmount;
 
   async function handleSubmit(formData: FormData) {
     setErrorMsg(null)
@@ -82,7 +88,14 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
     historyFormData.append("date", new Date().toISOString().split('T')[0])
     
     const totalQty = payloadData.reduce((acc: number, i: any) => acc + i.qty, 0)
-    historyFormData.append("description", `Rental Paket: ${pkg.name} (${totalQty} Unit Aset)`)
+    let historyDesc = `Rental Paket: ${pkg.name} (${totalQty} Unit Aset)`
+    if (discountPercentage > 0) {
+      historyDesc += ` - Diskon ${discountPercentage}%`
+      if (discountDesc.trim() !== "") {
+        historyDesc += ` (${discountDesc.trim()})`
+      }
+    }
+    historyFormData.append("description", historyDesc)
     
     const historyPayload = payloadData.map((pItem: any) => {
       const itemDetail = items.find(i => i.id === pItem.id);
@@ -91,7 +104,7 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
         name: pItem.name,
         code: pItem.code,
         qty: pItem.qty,
-        price: rentPricePerItem
+        price: rentPricePerItem * (1 - (discountPercentage / 100))
       }
     })
     historyFormData.append("payload", JSON.stringify(historyPayload))
@@ -104,7 +117,7 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
   if (!isAdmin) return null;
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) setErrorMsg(null); }}>
+    <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) { setErrorMsg(null); setDiscountPercentage(0); setDiscountDesc(""); } }}>
       <DialogTrigger asChild>
         <button className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center shadow-md hover:shadow-emerald-900/50">
           <ShoppingCart className="w-4 h-4 mr-2" /> Sewa
@@ -135,7 +148,37 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
             </div>
           </div>
         </div>
-        <div className="border-t border-zinc-800 pt-4 shrink-0"><div className="flex justify-between items-center mb-4 px-1"><span className="text-sm font-medium text-zinc-400">Total Harga Sewa</span><span className="text-2xl font-bold text-emerald-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(grandTotal)}</span></div><form action={handleSubmit}><Button type="submit" disabled={!isAvailable || isSubmitting} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-11 text-base font-bold">{isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : "Proses Sewa (Rental)"}</Button></form></div>
+        <div className="border-t border-zinc-800 pt-4 shrink-0">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-4 mb-4 flex flex-col gap-2">
+            <div className="flex justify-between items-center text-sm text-zinc-400">
+              <span>Subtotal:</span>
+              <span>{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(subTotal)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-zinc-300">Diskon Keseluruhan (%)</span>
+              <Input type="number" min="0" max="100" value={discountPercentage} onChange={(e) => setDiscountPercentage(parseFloat(e.target.value) || 0)} className="w-20 h-8 text-right text-xs bg-zinc-900 border-zinc-700" />
+            </div>
+            {discountPercentage > 0 && (
+              <>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-zinc-300">Keterangan Diskon</span>
+                  <Input type="text" placeholder="Misal: Promo Event Tahunan" value={discountDesc} onChange={(e) => setDiscountDesc(e.target.value)} className="w-48 h-8 text-xs bg-zinc-900 border-zinc-700" />
+                </div>
+                <div className="flex justify-between items-center text-sm text-amber-400">
+                  <span>Potongan Diskon:</span>
+                  <span>-{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(discountAmount)}</span>
+                </div>
+              </>
+            )}
+            <div className="flex justify-between items-center pt-2 border-t border-zinc-800/50 mt-1">
+              <span className="text-sm font-bold text-zinc-300">Total Harga Sewa:</span>
+              <span className="text-xl font-bold text-emerald-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(grandTotal)}</span>
+            </div>
+          </div>
+          <form action={handleSubmit}>
+            <Button type="submit" disabled={!isAvailable || isSubmitting} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-11 text-base font-bold">{isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : "Proses Sewa (Rental)"}</Button>
+          </form>
+        </div>
       </DialogContent>
     </Dialog>
   )
