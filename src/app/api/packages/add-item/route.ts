@@ -4,7 +4,23 @@ import prisma from "@/lib/prisma";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { packageId, item, quantity = 1 } = body;
+    const { packageId, newPackageName, item, quantity = 1 } = body;
+
+    // --- LOGIC BIKIN PAKET BARU ---
+    if (newPackageName) {
+      const initialPayload = [{ ...item, qty: quantity }];
+      const newPkg = await prisma.packageTemplate.create({
+        data: {
+          name: newPackageName,
+          description: "Dibuat cepat melalui dashboard barang",
+          payload: JSON.stringify(initialPayload),
+        }
+      });
+      return NextResponse.json({ message: "Paket baru berhasil dibuat", data: newPkg }, { status: 200 });
+    }
+
+    // --- LOGIC TAMBAH KE PAKET EXISTING ---
+    if (!packageId) return NextResponse.json({ error: "Data paket tidak lengkap" }, { status: 400 });
 
     // 1. Ambil data paket yang dipilih
     const pkg = await prisma.packageTemplate.findUnique({

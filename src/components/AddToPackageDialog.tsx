@@ -21,13 +21,16 @@ export function AddToPackageDialog({
   packages: PackageTemplate[] 
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [mode, setMode] = useState<'existing' | 'new'>('existing');
   const [selectedPackage, setSelectedPackage] = useState("");
+  const [newPackageName, setNewPackageName] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   const handleAddToPackage = async () => {
-    if (!selectedPackage) return alert("Pilih paket terlebih dahulu!");
+    if (mode === 'existing' && !selectedPackage) return alert("Pilih paket terlebih dahulu!");
+    if (mode === 'new' && !newPackageName.trim()) return alert("Nama paket baru harus diisi!");
     setLoading(true);
 
     try {
@@ -35,7 +38,8 @@ export function AddToPackageDialog({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          packageId: selectedPackage,
+          packageId: mode === 'existing' ? selectedPackage : undefined,
+          newPackageName: mode === 'new' ? newPackageName : undefined,
           quantity: quantity,
           item: {
             id: item.id,
@@ -48,8 +52,9 @@ export function AddToPackageDialog({
       });
 
       if (res.ok) {
-        alert(`Berhasil menambahkan ${item.name} ke paket!`);
+        alert(mode === 'new' ? `Berhasil membuat paket ${newPackageName}!` : `Berhasil menambahkan ${item.name} ke paket!`);
         setIsOpen(false);
+        setNewPackageName(""); // reset state agar form bersih pas dibuka lagi
         router.refresh();
       } else {
         const err = await res.json();
@@ -92,23 +97,56 @@ export function AddToPackageDialog({
             </p>
             
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-1.5">
-                  Pilih Paket Tujuan
-                </label>
-                <select
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-sm text-zinc-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                  value={selectedPackage}
-                  onChange={(e) => setSelectedPackage(e.target.value)}
+              {/* TOGGLE TAB MODE */}
+              <div className="flex bg-zinc-950 p-1 rounded-lg border border-zinc-800">
+                <button 
+                  type="button"
+                  onClick={() => setMode('existing')}
+                  className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${mode === 'existing' ? 'bg-zinc-800 text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
                 >
-                  <option value="" className="text-zinc-500">-- Pilih Paket Rental --</option>
-                  {packages.map((pkg) => (
-                    <option key={pkg.id} value={pkg.id}>
-                      {pkg.name}
-                    </option>
-                  ))}
-                </select>
+                  Paket Tersedia
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setMode('new')}
+                  className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${mode === 'new' ? 'bg-zinc-800 text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                >
+                  Buat Paket Baru
+                </button>
               </div>
+
+              {mode === 'existing' ? (
+                <div>
+                  <label className="block text-sm font-medium text-zinc-300 mb-1.5">
+                    Pilih Paket Tujuan
+                  </label>
+                  <select
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-sm text-zinc-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    value={selectedPackage}
+                    onChange={(e) => setSelectedPackage(e.target.value)}
+                  >
+                    <option value="" className="text-zinc-500">-- Pilih Paket Rental --</option>
+                    {packages.map((pkg) => (
+                      <option key={pkg.id} value={pkg.id}>
+                        {pkg.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-zinc-300 mb-1.5">
+                    Nama Paket Baru
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: Paket Wedding A"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-sm text-zinc-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    value={newPackageName}
+                    onChange={(e) => setNewPackageName(e.target.value)}
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-zinc-300 mb-1.5">
