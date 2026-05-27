@@ -16,6 +16,7 @@ import { EditPackageDialog } from "@/components/EditPackageDialog";
 import { RentPackageDialog } from "@/components/RentPackageDialog";
 import { PrintPackageDialog } from "@/components/PrintPackageDialog";
 import { updateHistory, deleteHistory, deletePackageTemplate, batchRegenerateCodes } from "@/app/actions";
+import { AddToPackageDialog } from "@/components/AddToPackageDialog";
 
 type Category = {
   id: string;
@@ -682,6 +683,7 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                         <div className="flex items-center gap-2">
                           <EditItemDialog item={item} allCategories={categories} />
                           <DeleteItemDialog item={item} />
+                          <AddToPackageDialog item={item} packages={packages} />
                         </div>
                       )}
                       <div className="text-right">

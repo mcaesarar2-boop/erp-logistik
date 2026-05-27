@@ -1,0 +1,47 @@
+import { NextResponse } from "next/server";
+import prisma from "@/lib/prisma";
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+    const { packageId, item, quantity = 1 } = body;
+
+    // 1. Ambil data paket yang dipilih
+    const pkg = await prisma.packageTemplate.findUnique({
+      where: { id: packageId },
+    });
+
+    if (!pkg) {
+      return NextResponse.json({ error: "Paket tidak ditemukan" }, { status: 404 });
+    }
+
+    // 2. Parse payload dari JSON string ke Array (Dilengkapi pengaman)
+    let payload = [];
+    try {
+      payload = pkg.payload ? JSON.parse(pkg.payload) : [];
+    } catch (e) {
+      payload = []; // Fallback aman jika string payload di DB rusak/bukan JSON
+    }
+
+    // 3. Cek apakah item sudah ada di dalam paket tersebut
+    const existingIndex = payload.findIndex((i: any) => i.id === item.id);
+    if (existingIndex !== -1) {
+      // PERBAIKAN: Gunakan "qty" agar cocok dengan EditPackageDialog & RentPackageDialog
+      payload[existingIndex].qty = (payload[existingIndex].qty || 0) + quantity;
+    } else {
+      // PERBAIKAN: Gunakan "qty" saat push barang baru
+      payload.push({ ...item, qty: quantity });
+    }
+
+    // 4. Simpan kembali (update) ke database
+    const updatedPackage = await prisma.packageTemplate.update({
+      where: { id: packageId },
+      data: { payload: JSON.stringify(payload) },
+    });
+
+    return NextResponse.json({ message: "Berhasil ditambahkan", data: updatedPackage }, { status: 200 });
+  } catch (error) {
+    console.error("Gagal menambah barang ke paket:", error);
+    return NextResponse.json({ error: "Terjadi kesalahan di server" }, { status: 500 });
+  }
+}
