@@ -623,10 +623,10 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
           {/* Render Tabel/List Data Barang */}
           {itemsToDisplay.length > 0 ? (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
                 {currentItems.map(item => (
-                <div key={item.id} className="rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/60 transition-all flex flex-col min-h-[320px] overflow-hidden shadow-lg">
-                  <div className="h-48 w-full bg-zinc-950/50 relative group overflow-hidden border-b border-zinc-800">
+                <div key={item.id} className="rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/60 transition-all flex flex-col min-h-[250px] sm:min-h-[320px] overflow-hidden shadow-lg">
+                  <div className="h-32 sm:h-48 w-full bg-zinc-950/50 relative group overflow-hidden border-b border-zinc-800">
                     {item.imageUrl ? (
                       <img 
                         src={item.imageUrl} 
@@ -641,76 +641,81 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                     )}
                     <div className="absolute top-3 left-3 flex flex-wrap gap-1 max-w-[70%]">
                       {item.categories?.map(cat => (
-                        <span key={cat.id} className="inline-flex items-center rounded-md bg-zinc-950/80 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-300 ring-1 ring-inset ring-zinc-700/50 backdrop-blur-sm">
+                        <span key={cat.id} className="inline-flex items-center rounded-md bg-zinc-950/80 px-1.5 py-0.5 sm:px-2.5 sm:py-1 text-[8px] sm:text-[10px] font-bold uppercase tracking-wider text-zinc-300 ring-1 ring-inset ring-zinc-700/50 backdrop-blur-sm">
                           {cat.name}
                         </span>
                       ))}
                     </div>
-                <div className="absolute top-3 right-3 flex flex-col gap-1 items-end">
+                <div className="absolute top-2 right-2 sm:top-3 sm:right-3 flex flex-col gap-1 items-end">
                   {item.quantity > 0 && (
-                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded tracking-wider shadow-lg backdrop-blur-md bg-emerald-950/80 text-emerald-400 ring-1 ring-emerald-500/30">Tersedia: {item.quantity}</span>
+                    <span className="text-[8px] sm:text-[10px] font-bold uppercase px-1.5 sm:px-2 py-0.5 rounded tracking-wider shadow-lg backdrop-blur-md bg-emerald-950/80 text-emerald-400 ring-1 ring-emerald-500/30"><span className="hidden sm:inline">Tersedia: </span>{item.quantity}</span>
                   )}
                   {item.rentedQuantity > 0 && (
-                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded tracking-wider shadow-lg backdrop-blur-md bg-amber-950/80 text-amber-400 ring-1 ring-amber-500/30">Keluar: {item.rentedQuantity}</span>
+                    <span className="text-[8px] sm:text-[10px] font-bold uppercase px-1.5 sm:px-2 py-0.5 rounded tracking-wider shadow-lg backdrop-blur-md bg-amber-950/80 text-amber-400 ring-1 ring-amber-500/30"><span className="hidden sm:inline">Keluar: </span>{item.rentedQuantity}</span>
                   )}
                   {item.maintenanceQuantity > 0 && (
-                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded tracking-wider shadow-lg backdrop-blur-md bg-red-950/80 text-red-400 ring-1 ring-red-500/30">MT: {item.maintenanceQuantity}</span>
+                    <span className="text-[8px] sm:text-[10px] font-bold uppercase px-1.5 sm:px-2 py-0.5 rounded tracking-wider shadow-lg backdrop-blur-md bg-red-950/80 text-red-400 ring-1 ring-red-500/30">MT: {item.maintenanceQuantity}</span>
                   )}
                     </div>
                   </div>
 
-                  <div className="p-5 flex flex-col flex-1">
-                    <h2 className="text-xl font-bold truncate text-zinc-100">{item.name}</h2>
-                    <p className="text-sm font-mono text-zinc-500 mb-3">{item.code}</p>
-                    <p className="text-sm text-zinc-400 line-clamp-2 mb-2">{item.description || "Tidak ada deskripsi."}</p>
+                  <div className="p-3 sm:p-5 flex flex-col flex-1">
+                    <h2 className="text-base sm:text-xl font-bold truncate text-zinc-100">{item.name}</h2>
+                    <p className="text-xs sm:text-sm font-mono text-zinc-500 mb-2 sm:mb-3">{item.code}</p>
+                    <p className="text-xs sm:text-sm text-zinc-400 line-clamp-2 mb-2 hidden sm:block">{item.description || "Tidak ada deskripsi."}</p>
                     
                     {item.createdAt ? (
-                      <p className="text-[11px] text-zinc-500 mb-4 font-medium">
+                      <p className="text-[9px] sm:text-[11px] text-zinc-500 mb-2 sm:mb-4 font-medium hidden sm:block">
                         Ditambahkan: {new Date(item.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
                       </p>
                     ) : (
-                      <div className="mb-4"></div>
+                      <div className="mb-2 sm:mb-4 hidden sm:block"></div>
                     )}
                     
-                    <div className="bg-zinc-950/50 rounded-lg p-3 mb-4 border border-zinc-800/50">
-                      <p className="text-xs font-semibold text-zinc-400 border-b border-zinc-800/50 pb-1 mb-2">Valuasi Item</p>
+                    <div className="bg-zinc-950/50 rounded-lg p-2 sm:p-3 mb-3 sm:mb-4 border border-zinc-800/50">
+                      <p className="text-[10px] sm:text-xs font-semibold text-zinc-400 border-b border-zinc-800/50 pb-1 mb-1.5 sm:mb-2">Valuasi Item</p>
                       <div className="flex justify-between items-center mb-1">
-                        <p className="text-[11px] text-zinc-500">Harga Satuan</p>
-                        <p className="text-xs font-medium text-zinc-300">
+                        <p className="text-[9px] sm:text-[11px] text-zinc-500">Satuan</p>
+                        <p className="text-[10px] sm:text-xs font-medium text-zinc-300">
                           {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.price || 0)}
                         </p>
                       </div>
-                      <div className="flex justify-between items-center mb-1">
-                        <p className="text-[11px] text-zinc-500">Harga Total</p>
-                        <p className="text-xs font-bold text-blue-400">
+                      <div className="flex justify-between items-center mb-1 hidden sm:flex">
+                        <p className="text-[9px] sm:text-[11px] text-zinc-500">Total</p>
+                        <p className="text-[10px] sm:text-xs font-bold text-blue-400">
                           {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format((item.quantity + item.rentedQuantity + item.maintenanceQuantity) * (item.price || 0))}
                         </p>
                       </div>
-                      <div className="flex justify-between items-center">
-                        <p className="text-[11px] text-zinc-500">Harga Sewa ({item.rentPercentage || 0}%)</p>
-                        <p className="text-sm font-bold text-emerald-400">
+                      <div className="flex justify-between items-center mt-1 sm:mt-0">
+                        <p className="text-[9px] sm:text-[11px] text-zinc-500">Sewa <span className="hidden sm:inline">({item.rentPercentage || 0}%)</span></p>
+                        <p className="text-xs sm:text-sm font-bold text-emerald-400">
                           {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(((item.price || 0) * (item.rentPercentage || 0)) / 100)}
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex justify-between items-end border-t border-zinc-800/50 pt-4 mt-auto">
+                    <div className="flex flex-col-reverse sm:flex-row justify-between items-start sm:items-end border-t border-zinc-800/50 pt-3 sm:pt-4 mt-auto gap-3 sm:gap-0">
                       {isAdmin && (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
                           <EditItemDialog item={item} allCategories={categories} />
                           <DeleteItemDialog item={item} />
                           <AddToPackageDialog item={item} packages={packages} />
                         </div>
                       )}
-                      <div className="text-right">
-                    <p className="text-3xl font-black leading-none text-zinc-50">
-                      {activeLayer === 'rented' ? item.rentedQuantity : 
-                       activeLayer === 'maintenance' ? item.maintenanceQuantity : 
-                       (item.quantity + item.rentedQuantity + item.maintenanceQuantity)}
-                    </p>
-                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mt-1">
-                      {activeLayer === 'all_items' ? 'Total Unit' : 'Unit'}
-                    </p>
+                      <div className="flex items-center sm:block w-full justify-between sm:text-right">
+                        <p className="text-[10px] sm:text-[10px] font-bold text-zinc-500 uppercase tracking-wider block sm:hidden">
+                          {activeLayer === 'all_items' ? 'Total Unit' : 'Unit'}:
+                        </p>
+                        <div className="flex flex-col items-end">
+                          <p className="text-xl sm:text-3xl font-black leading-none text-zinc-50">
+                            {activeLayer === 'rented' ? item.rentedQuantity : 
+                             activeLayer === 'maintenance' ? item.maintenanceQuantity : 
+                             (item.quantity + item.rentedQuantity + item.maintenanceQuantity)}
+                          </p>
+                          <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mt-1 hidden sm:block">
+                            {activeLayer === 'all_items' ? 'Total Unit' : 'Unit'}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
