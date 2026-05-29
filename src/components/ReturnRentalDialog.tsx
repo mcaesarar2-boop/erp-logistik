@@ -41,7 +41,7 @@ export function ReturnRentalDialog({ items, activeEvent }: ReturnRentalDialogPro
     return activeEvent ? (() => {
       const payload = JSON.parse(activeEvent.payload || "[]");
       return payload
-        .filter((p: any) => (p.qty - (p.returnedQty || 0)) > 0)
+        .filter((p: any) => (p.qty - (p.returnedQty || 0)) > 0 && p.code !== "LAYANAN" && !(p.id && p.id.startsWith("custom-")))
         .map((p: any) => {
           const realItem = items.find(i => i.id === p.id || i.code === p.code);
           return {
@@ -122,7 +122,11 @@ export function ReturnRentalDialog({ items, activeEvent }: ReturnRentalDialogPro
       formData.append("historyPayload", JSON.stringify(newPayload));
       
       // Cek otomatis apakah semua barang pada event ini sudah dikembalikan?
-      const isAllReturned = newPayload.every((p: any) => (p.returnedQty || 0) >= p.qty);
+      // (Abaikan layanan tambahan/custom yang memang tidak dikembalikan ke gudang)
+      const isAllReturned = newPayload
+        .filter((p: any) => p.code !== "LAYANAN" && !(p.id && p.id.startsWith("custom-")))
+        .every((p: any) => (p.returnedQty || 0) >= p.qty);
+        
       if (isAllReturned) {
         formData.append("historyDesc", activeEvent.description + " [SELESAI]");
       }
@@ -179,7 +183,7 @@ export function ReturnRentalDialog({ items, activeEvent }: ReturnRentalDialogPro
                 onKeyDown={handleBarcodeScan} // Tambahkan event handler di sini
               />
               {showResults && searchQuery && (
-                <div className="absolute top-full mt-1 left-0 right-0 max-h-[150px] overflow-y-auto overflow-x-hidden bg-zinc-800 border border-zinc-700 rounded-md shadow-2xl z-50">
+                <div className="absolute top-full mt-1 left-0 w-full max-h-[150px] overflow-y-auto overflow-x-hidden bg-zinc-800 border border-zinc-700 rounded-md shadow-2xl z-50">
                 {filteredItems.length > 0 ? (
                   filteredItems.map((item: any) => (
                     <div key={item.id} className="p-3 hover:bg-zinc-700 cursor-pointer border-b border-zinc-700/50 flex justify-between items-center" onClick={() => addToCart(item)}>

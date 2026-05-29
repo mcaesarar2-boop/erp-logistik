@@ -604,8 +604,13 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {activeEvents.map(event => {
                   const payload = event.payload ? JSON.parse(event.payload) : [];
-                  const activeItems = payload.filter((p: any) => (p.qty - (p.returnedQty || 0)) > 0);
-                  if (activeItems.length === 0) return null; // Fallback aman
+                  // Saring item yang belum dikembalikan, dan abaikan layanan tambahan
+                  const activeItems = payload.filter((p: any) => 
+                    (p.qty - (p.returnedQty || 0)) > 0 && 
+                    p.code !== "LAYANAN" && 
+                    !(p.id && p.id.startsWith("custom-"))
+                  );
+                  if (activeItems.length === 0) return null; // Fallback aman jika semua barang fisik sudah kembali
 
                   return (
                     <div key={event.id} className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-5 flex flex-col shadow-sm group relative">

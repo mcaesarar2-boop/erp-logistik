@@ -347,10 +347,10 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
 
           {packages.length > 0 && (
             <div className="space-y-2 shrink-0 bg-zinc-900/50 p-3 rounded-lg border border-zinc-800">
-              <Label className="flex items-center gap-2"><PackageOpen className="w-4 h-4 text-emerald-500"/> Gunakan Template Paket</Label>
+              <Label className="flex items-center gap-2 text-emerald-400"><PackageOpen className="w-4 h-4"/> Gunakan Template Paket</Label>
               <div className="flex gap-2">
                 <select 
-                  className="flex-1 bg-zinc-950 text-zinc-100 text-sm border border-zinc-700 rounded-md outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer p-2"
+                  className="flex-1 min-w-0 truncate bg-zinc-950 text-zinc-100 text-sm border border-zinc-700 rounded-md outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer h-10 px-3"
                   value={selectedPackageId}
                   onChange={(e) => handleLoadPackage(e.target.value)}
                 >
@@ -360,7 +360,7 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
                   ))}
                 </select>
                 {selectedPackageId && (
-                  <Button type="button" variant="destructive" size="icon" onClick={handleDeletePackage} disabled={isDeletingPkg} className="shrink-0 h-auto px-3 border border-red-900 bg-red-950/50 text-red-400 hover:bg-red-900">
+                  <Button type="button" variant="destructive" size="icon" onClick={handleDeletePackage} disabled={isDeletingPkg} className="shrink-0 h-10 w-10 border border-red-900 bg-red-950/50 text-red-400 hover:bg-red-900">
                     {isDeletingPkg ? <Loader2 className="w-4 h-4 animate-spin"/> : <Trash2 className="w-4 h-4" />}
                   </Button>
                 )}
@@ -374,7 +374,7 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
               <Input placeholder="Ketik nama atau kode aset..." className="pl-9 bg-zinc-900 border-zinc-800" value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setShowResults(true) }} onFocus={() => setShowResults(true)} />
               {showResults && searchQuery && (
-                <div className="absolute top-full mt-1 left-0 right-0 max-h-[150px] overflow-y-auto overflow-x-hidden bg-zinc-800 border border-zinc-700 rounded-md shadow-2xl z-50">
+                <div className="absolute top-full mt-1 left-0 w-full max-h-[150px] overflow-y-auto overflow-x-hidden bg-zinc-800 border border-zinc-700 rounded-md shadow-2xl z-50">
                 {filteredItems.filter(i => i.quantity > 0).length > 0 ? (
                   filteredItems.filter(i => i.quantity > 0).map(item => (
                     <div key={item.id} className="p-3 hover:bg-zinc-700 cursor-pointer border-b border-zinc-700/50 flex justify-between items-center" onClick={() => addToCart(item)}>
