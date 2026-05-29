@@ -73,6 +73,22 @@ export function ReturnRentalDialog({ items, activeEvent }: ReturnRentalDialogPro
     setShowResults(false)
   }
 
+  const handleBarcodeScan = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && searchQuery.trim() !== '') {
+      e.preventDefault(); // Mencegah form submit jika input ada di dalam form
+      const scannedItem = rentableItems.find((item: any) => 
+        item.code.toLowerCase() === searchQuery.trim().toLowerCase()
+      );
+      if (scannedItem) {
+        addToCart(scannedItem);
+        setSearchQuery(''); // Bersihkan input setelah "scan"
+        setErrorMsg(null); // Bersihkan pesan error jika ada
+      } else {
+        setErrorMsg(`Aset dengan kode "${searchQuery}" tidak ditemukan atau tidak sedang disewa.`);
+      }
+    }
+  };
+
   const addAllToCart = () => {
     setCart(rentableItems.map((item: any) => ({ ...item, qty: item.rentedQuantity })))
     setSearchQuery("")
@@ -148,19 +164,20 @@ export function ReturnRentalDialog({ items, activeEvent }: ReturnRentalDialogPro
           <div className="space-y-2 shrink-0">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-0">
               <Label>{activeEvent ? "Daftar Aset di Event Ini" : "Cari Aset yang Sedang Disewa"}</Label>
-              {rentableItems.length > 0 && (
-                <button 
-                  type="button" 
-                  onClick={addAllToCart}
-                  className="text-[10px] sm:text-xs bg-blue-950/50 hover:bg-blue-900 text-blue-400 px-2 py-1 rounded border border-blue-900 transition-colors font-medium self-start sm:self-auto"
-                >
-                  Pilih Semua Sekaligus
-                </button>
-              )}
+              <p className="text-xs text-zinc-500 italic">
+                (Ketik kode aset lalu tekan Enter untuk "scan")
+              </p>
             </div>
             <div className="relative z-50">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
-              <Input placeholder="Ketik nama atau kode aset..." className="pl-9 bg-zinc-900 border-zinc-800 focus:ring-blue-500" value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setShowResults(true) }} onFocus={() => setShowResults(true)} />
+              <Input 
+                placeholder="Ketik nama atau kode aset..." 
+                className="pl-9 bg-zinc-900 border-zinc-800 focus:ring-blue-500" 
+                value={searchQuery} 
+                onChange={(e) => { setSearchQuery(e.target.value); setShowResults(true) }} 
+                onFocus={() => setShowResults(true)} 
+                onKeyDown={handleBarcodeScan} // Tambahkan event handler di sini
+              />
               {showResults && searchQuery && (
                 <div className="absolute top-full mt-1 left-0 right-0 max-h-[150px] overflow-y-auto overflow-x-hidden bg-zinc-800 border border-zinc-700 rounded-md shadow-2xl z-50">
                 {filteredItems.length > 0 ? (
@@ -174,6 +191,16 @@ export function ReturnRentalDialog({ items, activeEvent }: ReturnRentalDialogPro
                 </div>
               )}
             </div>
+            
+            {rentableItems.length > 0 && (
+                <button 
+                  type="button" 
+                  onClick={addAllToCart}
+                  className="text-[10px] sm:text-xs bg-blue-950/50 hover:bg-blue-900 text-blue-400 px-2 py-1 rounded border border-blue-900 transition-colors font-medium self-start sm:self-auto"
+                >
+                  Pilih Semua Sekaligus
+                </button>
+              )}
           </div>
 
           <div className="flex flex-col gap-2 pt-2 flex-1 overflow-hidden">
