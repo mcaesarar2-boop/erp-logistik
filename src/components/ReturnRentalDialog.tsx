@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -30,33 +30,39 @@ export function ReturnRentalDialog({ items, activeEvent }: ReturnRentalDialogPro
   const [isAdmin, setIsAdmin] = useState(false)
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
+      // TODO: [KEAMANAN] Pindahkan daftar email admin ke environment variables (.env.local) untuk production.
       const ADMIN_EMAILS = ["mcaesarar@gmail.com"] 
       if (data.user?.email && ADMIN_EMAILS.includes(data.user.email.toLowerCase())) setIsAdmin(true)
     })
   }, [])
 
   // Tentukan item apa saja yang bisa dikembalikan (Jika activeEvent ada, batasi ke event tersebut)
-  const rentableItems = activeEvent ? (() => {
-    const payload = JSON.parse(activeEvent.payload || "[]");
-    return payload
-      .filter((p: any) => (p.qty - (p.returnedQty || 0)) > 0)
-      .map((p: any) => {
-        const realItem = items.find(i => i.id === p.id || i.code === p.code);
-        return {
-          ...p,
-          id: p.id || realItem?.id,
-          name: p.name || realItem?.name,
-          code: p.code || realItem?.code,
-          rentedQuantity: Math.min((p.qty - (p.returnedQty || 0)), realItem?.rentedQuantity || 0) // Tidak bisa kembali lebih dari yang riil di gudang
-        }
-      })
-      .filter((p: any) => p.id && p.rentedQuantity > 0);
-  })() : items.filter(i => i.rentedQuantity > 0);
+  const rentableItems = useMemo(() => {
+    return activeEvent ? (() => {
+      const payload = JSON.parse(activeEvent.payload || "[]");
+      return payload
+        .filter((p: any) => (p.qty - (p.returnedQty || 0)) > 0)
+        .map((p: any) => {
+          const realItem = items.find(i => i.id === p.id || i.code === p.code);
+          return {
+            ...p,
+            id: p.id || realItem?.id,
+            name: p.name || realItem?.name,
+            code: p.code || realItem?.code,
+            rentedQuantity: Math.min((p.qty - (p.returnedQty || 0)), realItem?.rentedQuantity || 0) // Tidak bisa kembali lebih dari yang riil di gudang
+          }
+        })
+        .filter((p: any) => p.id && p.rentedQuantity > 0);
+    })() : items.filter(i => i.rentedQuantity > 0);
+  }, [items, activeEvent]);
 
-  const filteredItems = rentableItems.filter((item: any) => 
-    item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.code.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const filteredItems = useMemo(() => {
+    if (!searchQuery) return [];
+    return rentableItems.filter((item: any) => 
+      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.code.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [rentableItems, searchQuery]);
 
   const addToCart = (item: any) => {
     if (item.rentedQuantity <= 0) return
@@ -126,7 +132,7 @@ export function ReturnRentalDialog({ items, activeEvent }: ReturnRentalDialogPro
           <span className="inline">{activeEvent ? "Kembalikan Event Ini" : "Kembalikan Aset"}</span>
         </button>
       </DialogTrigger>
-      <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-50 flex flex-col max-h-[90vh] overflow-hidden">
+      <DialogContent aria-describedby={undefined} className="bg-zinc-950 border-zinc-800 text-zinc-50 flex flex-col max-h-[90vh] overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-blue-400">
             <Undo2 className="w-5 h-5" /> {activeEvent ? "Pengembalian Aset Event" : "Form Pengembalian Aset (Rental)"}

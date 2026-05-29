@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -40,10 +40,13 @@ export function AddPackageDialog({ items }: AddPackageDialogProps) {
     })
   }, [])
 
-  const filteredItems = items.filter(item => 
-    item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.code.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const filteredItems = useMemo(() => {
+    if (!searchQuery) return [];
+    return items.filter(item => 
+      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.code.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [items, searchQuery]);
 
   const addToCart = (item: any) => {
     if (!cart.find(c => c.id === item.id)) {
@@ -105,7 +108,7 @@ export function AddPackageDialog({ items }: AddPackageDialogProps) {
           <PackagePlus className="w-4 h-4 mr-2" /> Bikin Paket
         </Button>
       </DialogTrigger>
-      <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-50 flex flex-col max-h-[90vh] overflow-hidden">
+      <DialogContent aria-describedby={undefined} className="bg-zinc-950 border-zinc-800 text-zinc-50 flex flex-col max-h-[90vh] overflow-hidden">
         <DialogHeader>
           <DialogTitle>Buat Template Paket Rental</DialogTitle>
         </DialogHeader>

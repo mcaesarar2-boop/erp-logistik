@@ -4,25 +4,9 @@ import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { supabase } from "@/lib/supabase" // <--- IMPORT AGEN SUPABASE
 
-// --- DAFTAR ADMIN ---
-const ADMIN_EMAILS = ["mcaesarar@gmail.com"]; // Ganti dengan email asli adminmu!
-
-async function verifyAdmin() {
-  // SEMENTARA DIMATIKAN: Karena Next.js Server Actions belum disetting 
-  // untuk membaca Cookie browser, server selalu mengira kamu belum login.
-  // Untuk MVP ini, pencegahan Admin cukup dilakukan melalui blokir UI (Client Side).
-  return; 
-}
-
-// src/app/actions.ts
-
 // --- FUNGSI HELPER UNTUK UPLOAD FOTO ---
 async function uploadImageToSupabase(imageFile: File | null): Promise<string | undefined> {
-  // 1. Tambahan log untuk melihat apakah file sampai ke server
-  console.log("INFO FILE DARI FORM:", imageFile?.name, "Size:", imageFile?.size, "Type:", imageFile?.type)
-
   if (!imageFile || imageFile.size === 0 || imageFile.name === "undefined") {
-    console.log("Upload dibatalkan: File kosong atau tidak dilampirkan.")
     return undefined
   }
 
@@ -42,7 +26,6 @@ async function uploadImageToSupabase(imageFile: File | null): Promise<string | u
     }
 
     const { data: publicUrlData } = supabase.storage.from('item-images').getPublicUrl(fileName)
-    console.log("Upload Sukses! URL Publik:", publicUrlData.publicUrl)
     return publicUrlData.publicUrl
   } catch (err) {
     console.error("KESALAHAN SISTEM SAAT UPLOAD:", err)
@@ -62,8 +45,6 @@ function generatePrefix(categoryName: string) {
 
 export async function createItem(formData: FormData) {
   try {
-    await verifyAdmin();
-
     const name = formData.get("name") as string
     let code = formData.get("code") as string
     const categoryIds = formData.getAll("categories") as string[]
@@ -150,18 +131,9 @@ export async function createItem(formData: FormData) {
   }
 }
 
-// ... (biarkan fungsi updateItem, deleteItemFull, reduceItemQuantity, dan addStockToExistingItem tetap seperti aslinya di bawah ini) ...
-// Tambahkan fungsi ini di bagian bawah src/app/actions.ts
-
-// src/app/actions.ts
-
-// ... existing imports (prisma, revalidatePath, supabase)
-
 // --- FUNGSI UPDATE YANG SUDAH DI-UPGRADE ---
 export async function updateItem(id: string, formData: FormData) {
   try {
-    await verifyAdmin();
-
     const name = formData.get("name") as string
     const code = formData.get("code") as string
     const description = formData.get("description") as string
@@ -206,12 +178,8 @@ export async function updateItem(id: string, formData: FormData) {
   }
 }
 
-// --- Tambahkan di bagian bawah src/app/actions.ts ---
-
 export async function deleteItemFull(id: string) {
   try {
-    await verifyAdmin();
-
     // Hapus item dari database secara permanen
     await prisma.item.delete({
       where: { id }
@@ -226,8 +194,6 @@ export async function deleteItemFull(id: string) {
 
 export async function reduceItemQuantity(id: string, amountToReduce: number) {
   try {
-    await verifyAdmin();
-
     // Cari item-nya dulu
     const item = await prisma.item.findUnique({ where: { id } })
     if (!item) return { success: false, error: "Barang tidak ditemukan." }
@@ -248,12 +214,8 @@ export async function reduceItemQuantity(id: string, amountToReduce: number) {
   }
 }
 
-// --- Tambahkan di bagian paling bawah src/app/actions.ts ---
-
 export async function addStockToExistingItem(formData: FormData) {
   try {
-    await verifyAdmin();
-
     const id = formData.get("itemId") as string
     const quantityToAdd = parseInt(formData.get("quantity") as string) || 0
 
@@ -280,8 +242,6 @@ export async function addStockToExistingItem(formData: FormData) {
 // --- FUNGSI TAMBAH LABEL/KATEGORI BARU ---
 export async function createCategory(formData: FormData) {
   try {
-    await verifyAdmin();
-
     const name = formData.get("name") as string;
     if (!name) return { success: false, error: "Nama label tidak boleh kosong." };
 
@@ -305,8 +265,6 @@ export async function createCategory(formData: FormData) {
 // --- FUNGSI UPDATE LABEL/KATEGORI ---
 export async function updateCategory(id: string, formData: FormData) {
   try {
-    await verifyAdmin();
-
     const name = formData.get("name") as string;
     if (!name) return { success: false, error: "Nama label tidak boleh kosong." };
 
@@ -327,8 +285,6 @@ export async function updateCategory(id: string, formData: FormData) {
 // --- FUNGSI DELETE LABEL/KATEGORI ---
 export async function deleteCategory(id: string) {
   try {
-    await verifyAdmin();
-
     // Cek apakah ada barang yang menggunakan kategori ini
     const itemsCount = await prisma.item.count({ where: { categories: { some: { id } } } });
     if (itemsCount > 0) {
@@ -346,7 +302,6 @@ export async function deleteCategory(id: string) {
 // --- FUNGSI TAMBAH RENTAL MASAL ---
 export async function addBulkRental(formData: FormData) {
   try {
-    await verifyAdmin();
     const payloadStr = formData.get("payload") as string;
     if (!payloadStr) return { success: false, error: "Data kosong." };
     
@@ -375,7 +330,6 @@ export async function addBulkRental(formData: FormData) {
 // --- FUNGSI PENGEMBALIAN RENTAL (BALIK GUDANG) ---
 export async function returnBulkRental(formData: FormData) {
   try {
-    await verifyAdmin();
     const payloadStr = formData.get("payload") as string;
     const historyId = formData.get("historyId") as string | null;
     const historyPayloadStr = formData.get("historyPayload") as string | null;
@@ -420,7 +374,6 @@ export async function returnBulkRental(formData: FormData) {
 // --- FUNGSI TAMBAH PEMELIHARAAN MASAL ---
 export async function addBulkMaintenance(formData: FormData) {
   try {
-    await verifyAdmin();
     const payloadStr = formData.get("payload") as string;
     if (!payloadStr) return { success: false, error: "Data kosong." };
     
@@ -447,7 +400,6 @@ export async function addBulkMaintenance(formData: FormData) {
 // --- FUNGSI RIWAYAT / TRANSAKSI ---
 export async function createHistory(formData: FormData) {
   try {
-    await verifyAdmin();
     const type = formData.get("type") as string;
     const date = new Date(formData.get("date") as string);
     const description = formData.get("description") as string;
@@ -465,7 +417,6 @@ export async function createHistory(formData: FormData) {
 
 export async function updateHistory(id: string, formData: FormData) {
   try {
-    await verifyAdmin();
     const date = new Date(formData.get("date") as string);
     const description = formData.get("description") as string;
     await prisma.history.update({
@@ -481,7 +432,6 @@ export async function updateHistory(id: string, formData: FormData) {
 
 export async function deleteHistory(id: string) {
   try {
-    await verifyAdmin();
     await prisma.history.delete({ where: { id } });
     revalidatePath("/");
     return { success: true };
@@ -493,7 +443,6 @@ export async function deleteHistory(id: string) {
 // --- FUNGSI PAKET / TEMPLATE RENTAL ---
 export async function createPackageTemplate(formData: FormData) {
   try {
-    await verifyAdmin();
     const name = formData.get("name") as string;
     const description = formData.get("description") as string;
     const payload = formData.get("payload") as string;
@@ -513,7 +462,6 @@ export async function createPackageTemplate(formData: FormData) {
 
 export async function updatePackageTemplate(id: string, formData: FormData) {
   try {
-    await verifyAdmin();
     const name = formData.get("name") as string;
     const description = formData.get("description") as string;
     const payload = formData.get("payload") as string;
@@ -534,7 +482,6 @@ export async function updatePackageTemplate(id: string, formData: FormData) {
 
 export async function deletePackageTemplate(id: string) {
   try {
-    await verifyAdmin();
     await prisma.packageTemplate.delete({ where: { id } });
     revalidatePath("/");
     return { success: true };
@@ -547,8 +494,6 @@ export async function deletePackageTemplate(id: string) {
 // --- FUNGSI BATCH GENERATE (FORMAT ULANG SEMUA KODE MASAL) ---
 export async function batchRegenerateCodes() {
   try {
-    await verifyAdmin();
-    
     // Ambil semua barang dari yang terlama ke terbaru
     const items = await prisma.item.findMany({
       include: { categories: true },

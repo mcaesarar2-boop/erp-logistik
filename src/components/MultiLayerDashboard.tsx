@@ -1,19 +1,18 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { EditItemDialog } from "@/components/EditItemDialog";
 import { DeleteItemDialog } from "@/components/DeleteItemDialog";
 import { AddCategoryDialog } from "@/components/AddCategoryDialog";
 import { EditCategoryDialog } from "@/components/EditCategoryDialog"; 
 import { DeleteCategoryDialog } from "@/components/DeleteCategoryDialog";
-import { Search, ArrowUpDown, History as HistoryIcon, Calendar, Trash2, Pencil, Loader2, Printer, PackageSearch, Eye } from "lucide-react";
+import { Search, ArrowUpDown, History as HistoryIcon, Calendar, Trash2, Pencil, Loader2, Printer, PackageSearch, Eye, ShoppingCart } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger, DialogHeader } from "@/components/ui/dialog";
 import { RentalInvoiceDialog } from "@/components/RentalInvoiceDialog";
 import { ReturnRentalDialog } from "@/components/ReturnRentalDialog";
 import { ReprintInvoiceDialog } from "@/components/ReprintInvoiceDialog";
 import { EditPackageDialog } from "@/components/EditPackageDialog";
-import { RentPackageDialog } from "@/components/RentPackageDialog";
 import { PrintPackageDialog } from "@/components/PrintPackageDialog";
 import { updateHistory, deleteHistory, deletePackageTemplate, batchRegenerateCodes } from "@/app/actions";
 import { AddToPackageDialog } from "@/components/AddToPackageDialog";
@@ -69,6 +68,7 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>('name_asc');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedItemDetail, setSelectedItemDetail] = useState<Item | null>(null);
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -79,6 +79,8 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
   const [deletingHistory, setDeletingHistory] = useState<History | null>(null);
   const [isHistoryActionLoading, setIsHistoryActionLoading] = useState(false);
   const [deletingPackage, setDeletingPackage] = useState<PackageTemplate | null>(null);
+  const [addingToCartPkg, setAddingToCartPkg] = useState<PackageTemplate | null>(null);
+  const [cartSuccessMsg, setCartSuccessMsg] = useState(false);
   
   // State untuk Batch Update Kode
   const [showBatchDialog, setShowBatchDialog] = useState(false);
@@ -88,7 +90,8 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
   const [isAdmin, setIsAdmin] = useState(false)
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      const ADMIN_EMAILS = ["mcaesarar@gmail.com"] // Ganti jika email admin berubah
+      // TODO: [KEAMANAN] Pindahkan daftar email admin ke environment variables (.env.local) untuk production.
+      const ADMIN_EMAILS = ["mcaesarar@gmail.com"]
       if (data.user?.email && ADMIN_EMAILS.includes(data.user.email.toLowerCase())) {
         setIsAdmin(true)
       }
@@ -112,55 +115,59 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
 
   // --- LOGIKA PENCARIAN SUPER CERDAS ---
   // Memfilter berdasarkan Label (Select Dropdown) DAN Teks Pencarian (Barang/Kode/Label)
-  const filteredItems = items.filter(item => {
-    const matchCategory = selectedCategory === 'ALL' || item.categories.some(c => c.id === selectedCategory);
-    const matchSearch = searchQuery === '' || 
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      item.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.categories.some(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()));
-    return matchCategory && matchSearch;
-  });
+  const filteredItems = useMemo(() => {
+    return items.filter(item => {
+      const matchCategory = selectedCategory === 'ALL' || item.categories.some(c => c.id === selectedCategory);
+      const matchSearch = searchQuery === '' || 
+        item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        item.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.categories.some(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()));
+      return matchCategory && matchSearch;
+    });
+  }, [items, selectedCategory, searchQuery]);
     
   // Filter berdasarkan Tab Layer yang aktif (kecuali Home)
-  let itemsToDisplay = filteredItems;
-  if (activeLayer === 'rented') itemsToDisplay = filteredItems.filter(i => i.rentedQuantity > 0);
-  if (activeLayer === 'maintenance') itemsToDisplay = filteredItems.filter(i => i.maintenanceQuantity > 0);
+  const itemsToDisplay = useMemo(() => {
+    let displayItems = filteredItems;
+    if (activeLayer === 'rented') displayItems = displayItems.filter(i => i.rentedQuantity > 0);
+    if (activeLayer === 'maintenance') displayItems = displayItems.filter(i => i.maintenanceQuantity > 0);
 
-  // --- LOGIKA PENGURUTAN (SORTING) ---
-  itemsToDisplay = [...itemsToDisplay].sort((a, b) => {
-    if (sortBy === 'name_asc') return a.name.localeCompare(b.name);
-    if (sortBy === 'name_desc') return b.name.localeCompare(a.name);
-    
-    if (sortBy === 'date_modified_desc') {
-      const dateA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
-      const dateB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
-      return dateB - dateA; // Terbaru di atas
-    }
-    
-    if (sortBy === 'date_modified_asc') {
-      const dateA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
-      const dateB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
-      return dateA - dateB; // Terlama di atas
-    }
+    // --- LOGIKA PENGURUTAN (SORTING) ---
+    return [...displayItems].sort((a, b) => {
+      if (sortBy === 'name_asc') return a.name.localeCompare(b.name);
+      if (sortBy === 'name_desc') return b.name.localeCompare(a.name);
+      
+      if (sortBy === 'date_modified_desc') {
+        const dateA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+        const dateB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+        return dateB - dateA; // Terbaru di atas
+      }
+      
+      if (sortBy === 'date_modified_asc') {
+        const dateA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+        const dateB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+        return dateA - dateB; // Terlama di atas
+      }
 
-    // Dapatkan nilai kuantitas yang relevan dengan tab yang sedang aktif
-    const getQty = (item: Item) => {
-      if (activeLayer === 'rented') return item.rentedQuantity;
-      if (activeLayer === 'maintenance') return item.maintenanceQuantity;
-      return item.quantity + item.rentedQuantity + item.maintenanceQuantity;
-    };
-    
-    const qtyA = getQty(a);
-    const qtyB = getQty(b);
-    
-    if (sortBy === 'qty_highest') return qtyB - qtyA;
-    if (sortBy === 'qty_lowest') return qtyA - qtyB;
-    
-    if (sortBy === 'price_highest') return (b.price || 0) - (a.price || 0);
-    if (sortBy === 'price_lowest') return (a.price || 0) - (b.price || 0);
-    
-    return 0;
-  });
+      // Dapatkan nilai kuantitas yang relevan dengan tab yang sedang aktif
+      const getQty = (item: Item) => {
+        if (activeLayer === 'rented') return item.rentedQuantity;
+        if (activeLayer === 'maintenance') return item.maintenanceQuantity;
+        return item.quantity + item.rentedQuantity + item.maintenanceQuantity;
+      };
+      
+      const qtyA = getQty(a);
+      const qtyB = getQty(b);
+      
+      if (sortBy === 'qty_highest') return qtyB - qtyA;
+      if (sortBy === 'qty_lowest') return qtyA - qtyB;
+      
+      if (sortBy === 'price_highest') return (b.price || 0) - (a.price || 0);
+      if (sortBy === 'price_lowest') return (a.price || 0) - (b.price || 0);
+      
+      return 0;
+    });
+  }, [filteredItems, activeLayer, sortBy]);
 
   // --- LOGIKA PAGINATION ---
   const indexOfLastItem = currentPage * itemsPerPage;
@@ -169,21 +176,27 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
   const totalPages = Math.ceil(itemsToDisplay.length / itemsPerPage);
 
   const totalItems = items.length;
-  const availableUnits = items.reduce((acc, item) => acc + item.quantity, 0);
-  const rentedUnits = items.reduce((acc, item) => acc + item.rentedQuantity, 0);
-  const maintenanceUnits = items.reduce((acc, item) => acc + item.maintenanceQuantity, 0);
+
+  const { availableUnits, rentedUnits, maintenanceUnits, totalValuation } = useMemo(() => {
+    return items.reduce((acc, item) => {
+      const totalQty = item.quantity + item.rentedQuantity + item.maintenanceQuantity;
+      return {
+        availableUnits: acc.availableUnits + item.quantity,
+        rentedUnits: acc.rentedUnits + item.rentedQuantity,
+        maintenanceUnits: acc.maintenanceUnits + item.maintenanceQuantity,
+        totalValuation: acc.totalValuation + (totalQty * (item.price || 0))
+      };
+    }, { availableUnits: 0, rentedUnits: 0, maintenanceUnits: 0, totalValuation: 0 });
+  }, [items]);
 
   // --- Active Events Logic ---
-  const activeEvents = histories.filter(h => 
-    h.type === 'INVOICE_RENTAL' && 
-    h.description?.includes('Event:') && 
-    !h.description?.includes('[SELESAI]')
-  );
-  
-  const totalValuation = items.reduce((acc, item) => {
-    const totalQty = item.quantity + item.rentedQuantity + item.maintenanceQuantity;
-    return acc + (totalQty * (item.price || 0));
-  }, 0);
+  const activeEvents = useMemo(() => {
+    return histories.filter(h => 
+      h.type === 'INVOICE_RENTAL' && 
+      h.description?.includes('Event:') && 
+      !h.description?.includes('[SELESAI]')
+    );
+  }, [histories]);
 
   const TABS = [
     { id: 'home', label: 'Home (Highlight)' },
@@ -432,7 +445,13 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                       </div>
                       <div className="flex items-center gap-2">
                         <PrintPackageDialog pkg={pkg} items={items} />
-                        <RentPackageDialog pkg={pkg} items={items} />
+                        <button
+                          onClick={() => setAddingToCartPkg(pkg)}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-sm font-medium transition-colors flex items-center gap-2 shadow-sm"
+                        >
+                          <ShoppingCart className="w-4 h-4 shrink-0" />
+                          <span className="hidden sm:inline">Ke Keranjang</span>
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -565,7 +584,7 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                                <Eye className="w-4 h-4" /> <span className="inline">Rincian</span>
                             </button>
                           </DialogTrigger>
-                          <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-50 max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+                          <DialogContent aria-describedby={undefined} className="bg-zinc-950 border-zinc-800 text-zinc-50 max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
                              <DialogHeader className="shrink-0 border-b border-zinc-800 pb-4">
                                <DialogTitle>
                                  Rincian Event: <span className="text-amber-400">{event.description?.split('|')[0].replace('Event:', '').trim()}</span>
@@ -660,7 +679,13 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                   </div>
 
                   <div className="p-3 sm:p-5 flex flex-col flex-1">
-                    <h2 className="text-base sm:text-xl font-bold truncate text-zinc-100">{item.name}</h2>
+                    <h2 
+                      className="text-base sm:text-xl font-bold truncate text-zinc-100 cursor-pointer hover:text-blue-400 transition-colors"
+                      onClick={() => setSelectedItemDetail(item)}
+                      title="Lihat Detail"
+                    >
+                      {item.name}
+                    </h2>
                     <p className="text-xs sm:text-sm font-mono text-zinc-500 mb-2 sm:mb-3">{item.code}</p>
                     <p className="text-xs sm:text-sm text-zinc-400 line-clamp-2 mb-2 hidden sm:block">{item.description || "Tidak ada deskripsi."}</p>
                     
@@ -695,13 +720,21 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                     </div>
 
                     <div className="flex flex-col-reverse sm:flex-row justify-between items-start sm:items-end border-t border-zinc-800/50 pt-3 sm:pt-4 mt-auto gap-3 sm:gap-0">
-                      {isAdmin && (
-                        <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
-                          <EditItemDialog item={item} allCategories={categories} />
-                          <DeleteItemDialog item={item} />
-                          <AddToPackageDialog item={item} packages={packages} />
-                        </div>
-                      )}
+                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
+                        <button 
+                          onClick={() => setSelectedItemDetail(item)}
+                          className="flex items-center justify-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors border border-zinc-700 shadow-sm"
+                        >
+                          <Eye className="w-3.5 h-3.5" /> <span className="inline">Detail</span>
+                        </button>
+                        {isAdmin && (
+                          <>
+                            <EditItemDialog item={item} allCategories={categories} />
+                            <DeleteItemDialog item={item} />
+                            <AddToPackageDialog item={item} packages={packages} />
+                          </>
+                        )}
+                      </div>
                       <div className="flex items-center sm:block w-full justify-between sm:text-right">
                         <p className="text-[10px] sm:text-[10px] font-bold text-zinc-500 uppercase tracking-wider block sm:hidden">
                           {activeLayer === 'all_items' ? 'Total Unit' : 'Unit'}:
@@ -763,7 +796,7 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
 
       {/* --- KOTAK POPUP PREVIEW FOTO --- */}
       <Dialog open={!!selectedImage} onOpenChange={(open) => !open && setSelectedImage(null)}>
-        <DialogContent className="bg-zinc-950/95 border-zinc-800 p-2 rounded-2xl shadow-2xl max-w-4xl flex justify-center items-center">
+        <DialogContent aria-describedby={undefined} className="bg-zinc-950/95 border-zinc-800 p-2 rounded-2xl shadow-2xl max-w-4xl flex justify-center items-center">
           <DialogTitle className="sr-only">Preview Foto Aset</DialogTitle>
           {selectedImage && (
             <img 
@@ -775,9 +808,120 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
         </DialogContent>
       </Dialog>
 
+      {/* --- KOTAK POPUP DETAIL ASET --- */}
+      <Dialog open={!!selectedItemDetail} onOpenChange={(open) => !open && setSelectedItemDetail(null)}>
+        <DialogContent aria-describedby={undefined} className="bg-zinc-950 border-zinc-800 text-zinc-50 max-w-2xl max-h-[90vh] overflow-hidden flex flex-col p-0">
+          <DialogTitle className="sr-only">Detail Aset</DialogTitle>
+          {selectedItemDetail && (
+            <>
+              <div className="relative h-48 sm:h-64 bg-zinc-900 border-b border-zinc-800 shrink-0">
+                {selectedItemDetail.imageUrl ? (
+                  <img 
+                    src={selectedItemDetail.imageUrl} 
+                    alt={selectedItemDetail.name} 
+                    className="w-full h-full object-cover cursor-pointer"
+                    onClick={() => setSelectedImage(selectedItemDetail.imageUrl!)}
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-zinc-700">
+                    <span className="text-sm font-bold uppercase tracking-widest border border-zinc-800 px-4 py-2 rounded-full">No Image</span>
+                  </div>
+                )}
+                <div className="absolute top-3 left-3 flex flex-wrap gap-1">
+                  {selectedItemDetail.categories?.map(cat => (
+                    <span key={cat.id} className="inline-flex items-center rounded-md bg-zinc-950/80 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-300 ring-1 ring-inset ring-zinc-700/50 backdrop-blur-sm">
+                      {cat.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              
+              <div className="p-4 sm:p-6 overflow-y-auto flex-1">
+                <div className="flex flex-col gap-1 mb-4 border-b border-zinc-800/50 pb-4">
+                  <h2 className="text-xl sm:text-2xl font-bold text-zinc-100">{selectedItemDetail.name}</h2>
+                  <p className="text-sm font-mono text-zinc-400">{selectedItemDetail.code}</p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">Status Ketersediaan</p>
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex justify-between items-center bg-emerald-950/20 border border-emerald-900/30 px-3 py-2 rounded-md">
+                          <span className="text-sm text-zinc-300">Tersedia (Gudang)</span>
+                          <span className="font-bold text-emerald-400">{selectedItemDetail.quantity} Unit</span>
+                        </div>
+                        <div className="flex justify-between items-center bg-amber-950/20 border border-amber-900/30 px-3 py-2 rounded-md">
+                          <span className="text-sm text-zinc-300">Sedang Keluar (Rental)</span>
+                          <span className="font-bold text-amber-400">{selectedItemDetail.rentedQuantity} Unit</span>
+                        </div>
+                        <div className="flex justify-between items-center bg-red-950/20 border border-red-900/30 px-3 py-2 rounded-md">
+                          <span className="text-sm text-zinc-300">Maintenance (MT)</span>
+                          <span className="font-bold text-red-400">{selectedItemDetail.maintenanceQuantity} Unit</span>
+                        </div>
+                        <div className="flex justify-between items-center bg-zinc-900 border border-zinc-800 px-3 py-2 rounded-md mt-1">
+                          <span className="text-sm font-bold text-zinc-100">Total Keseluruhan</span>
+                          <span className="font-black text-zinc-50">{selectedItemDetail.quantity + selectedItemDetail.rentedQuantity + selectedItemDetail.maintenanceQuantity} Unit</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">Informasi Valuasi & Harga</p>
+                      <div className="bg-zinc-900 border border-zinc-800 rounded-md p-3 space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-zinc-400">Harga Beli Satuan</span>
+                          <span className="text-sm font-medium text-zinc-200">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(selectedItemDetail.price || 0)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-zinc-400">Persentase Sewa</span>
+                          <span className="text-sm font-medium text-zinc-200">{selectedItemDetail.rentPercentage || 0}%</span>
+                        </div>
+                        <div className="flex justify-between items-center pt-2 border-t border-zinc-800 mt-2">
+                          <span className="text-sm font-bold text-zinc-300">Harga Sewa Satuan</span>
+                          <span className="text-sm font-bold text-emerald-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(((selectedItemDetail.price || 0) * (selectedItemDetail.rentPercentage || 0)) / 100)}</span>
+                        </div>
+                        <div className="flex justify-between items-center pt-2 border-t border-zinc-800">
+                          <span className="text-sm font-bold text-zinc-300">Total Valuasi Aset</span>
+                          <span className="text-sm font-bold text-blue-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format((selectedItemDetail.quantity + selectedItemDetail.rentedQuantity + selectedItemDetail.maintenanceQuantity) * (selectedItemDetail.price || 0))}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">Deskripsi Aset</p>
+                  <div className="bg-zinc-900/50 border border-zinc-800 rounded-md p-3 text-sm text-zinc-300 min-h-[60px] whitespace-pre-wrap">
+                    {selectedItemDetail.description || <span className="text-zinc-500 italic">Tidak ada deskripsi.</span>}
+                  </div>
+                </div>
+                
+                {selectedItemDetail.createdAt && (
+                  <p className="text-[10px] sm:text-xs text-zinc-500 mt-6 text-center">
+                    Ditambahkan ke sistem pada: {new Date(selectedItemDetail.createdAt).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                  </p>
+                )}
+              </div>
+              
+              <div className="p-4 border-t border-zinc-800 bg-zinc-950 shrink-0 flex justify-end gap-2">
+                <button 
+                  onClick={() => setSelectedItemDetail(null)}
+                  className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-100 rounded-md text-sm font-medium transition-colors border border-zinc-800"
+                >
+                  Tutup
+                </button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* KOTAK POPUP EDIT & DELETE HISTORY (INLINE UNTUK PERFORMA CEPAT) */}
       <Dialog open={!!editingHistory} onOpenChange={(open) => !open && setEditingHistory(null)}>
-        <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-50">
+        <DialogContent aria-describedby={undefined} className="bg-zinc-950 border-zinc-800 text-zinc-50">
           <DialogTitle>Ubah Riwayat Transaksi</DialogTitle>
           <form onSubmit={handleUpdateHistory} className="space-y-4 pt-2">
             <div className="space-y-2">
@@ -796,7 +940,7 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
       </Dialog>
 
       <Dialog open={!!deletingHistory} onOpenChange={(open) => !open && setDeletingHistory(null)}>
-        <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-50">
+        <DialogContent aria-describedby={undefined} className="bg-zinc-950 border-zinc-800 text-zinc-50">
           <DialogTitle className="text-red-400">Hapus Riwayat Transaksi?</DialogTitle>
           <p className="text-sm text-zinc-400 mt-2">Apakah Anda yakin ingin menghapus catatan riwayat faktur <strong>"{deletingHistory?.description}"</strong>? (Data barang di gudang tidak akan berubah, hanya menghilangkan catatannya saja).</p>
           <div className="grid grid-cols-2 gap-4 mt-6">
@@ -810,7 +954,7 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
 
       {/* KOTAK POPUP DELETE PAKET */}
       <Dialog open={!!deletingPackage} onOpenChange={(open) => !open && setDeletingPackage(null)}>
-        <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-50">
+        <DialogContent aria-describedby={undefined} className="bg-zinc-950 border-zinc-800 text-zinc-50">
           <DialogTitle className="text-red-400">Hapus Template Paket?</DialogTitle>
           <p className="text-sm text-zinc-400 mt-2">Apakah Anda yakin ingin menghapus template paket <strong>"{deletingPackage?.name}"</strong>? (Tindakan ini tidak bisa dibatalkan).</p>
           <div className="grid grid-cols-2 gap-4 mt-6">
@@ -824,7 +968,7 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
 
       {/* KOTAK POPUP BATCH REGENERATE KODE */}
       <Dialog open={showBatchDialog} onOpenChange={(open) => !open && setShowBatchDialog(false)}>
-        <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-50">
+        <DialogContent aria-describedby={undefined} className="bg-zinc-950 border-zinc-800 text-zinc-50">
           <DialogTitle className="text-indigo-400">Format Ulang Semua Kode Aset?</DialogTitle>
           <p className="text-sm text-zinc-400 mt-2">
             Tindakan ini akan <strong>mengubah seluruh kode aset saat ini</strong> secara otomatis menggunakan format baru (Contoh: <code>AUD-BCL-001</code>) berdasarkan label yang terpasang pada masing-masing barang.
@@ -841,6 +985,47 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
               {isBatchLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Ya, Format Ulang"}
             </button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* KOTAK POPUP KONFIRMASI KE KERANJANG */}
+      <Dialog open={!!addingToCartPkg} onOpenChange={(open) => !open && setAddingToCartPkg(null)}>
+        <DialogContent aria-describedby={undefined} className="bg-zinc-950 border-zinc-800 text-zinc-50">
+          <DialogTitle className="text-emerald-400 flex items-center gap-2">
+            <ShoppingCart className="w-5 h-5" />
+            Masukkan ke Keranjang?
+          </DialogTitle>
+          <p className="text-sm text-zinc-400 mt-2">
+            Apakah Anda yakin ingin memasukkan seluruh aset dari paket <strong>"{addingToCartPkg?.name}"</strong> ke Keranjang Kasir?
+          </p>
+          <div className="grid grid-cols-2 gap-4 mt-6">
+            <button onClick={() => setAddingToCartPkg(null)} className="h-10 border border-zinc-800 text-zinc-400 hover:bg-zinc-900 rounded-md transition-colors">Batal</button>
+            <button
+              onClick={() => {
+                if (addingToCartPkg) {
+                  window.dispatchEvent(new CustomEvent('add-to-pos-cart', { detail: { pkgId: addingToCartPkg.id } }));
+                  setAddingToCartPkg(null);
+                  setCartSuccessMsg(true); // Tampilkan popup sukses
+                }
+              }}
+              className="h-10 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md flex justify-center items-center transition-colors font-medium"
+            >
+              Ya, Masukkan
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* KOTAK POPUP SUKSES MASUK KERANJANG */}
+      <Dialog open={cartSuccessMsg} onOpenChange={setCartSuccessMsg}>
+        <DialogContent aria-describedby={undefined} className="bg-zinc-950 border-zinc-800 text-zinc-50 sm:max-w-sm flex flex-col items-center justify-center p-6 text-center">
+          <DialogTitle className="sr-only">Sukses</DialogTitle>
+          <div className="w-12 h-12 rounded-full bg-emerald-950/50 flex items-center justify-center mb-2 border border-emerald-900">
+            <ShoppingCart className="w-6 h-6 text-emerald-400" />
+          </div>
+          <h3 className="text-lg font-bold text-zinc-100">Berhasil!</h3>
+          <p className="text-sm text-zinc-400 mt-2">Seluruh aset telah dimasukkan ke Keranjang Kasir. Silakan buka Keranjang untuk memproses.</p>
+          <button onClick={() => setCartSuccessMsg(false)} className="mt-6 w-full h-10 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 rounded-md border border-zinc-800 transition-colors font-medium">Tutup</button>
         </DialogContent>
       </Dialog>
 
