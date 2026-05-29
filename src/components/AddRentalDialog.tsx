@@ -60,12 +60,12 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
     const handleAddToCart = (e: Event) => {
       const customEvent = e as CustomEvent;
       if (customEvent.detail?.pkgId) {
-        handleLoadPackage(customEvent.detail.pkgId);
+        handleLoadPackage(customEvent.detail.pkgId, true);
       }
     };
     window.addEventListener('add-to-pos-cart', handleAddToCart);
     return () => window.removeEventListener('add-to-pos-cart', handleAddToCart);
-  }, [packages, items, cart]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [packages, items, cart, selectedPackageId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredItems = items.filter(item => 
     item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -81,19 +81,48 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
     setShowResults(false)
   }
 
-  const handleLoadPackage = (pkgId: string) => {
-    setSelectedPackageId(pkgId)
+  const handleLoadPackage = (pkgId: string, isAppendOnly: boolean = false) => {
     setWarningMsg(null)
     setErrorMsg(null)
     
-    if (!pkgId) return;
+    let newCart = [...cart];
+
+    // Jika mengganti paket melalui dropdown, kurangi / hapus item dari paket sebelumnya terlebih dahulu
+    if (!isAppendOnly && selectedPackageId) {
+      const prevPkg = packages.find(p => p.id === selectedPackageId);
+      if (prevPkg) {
+        try {
+          const prevPayload = JSON.parse(prevPkg.payload);
+          prevPayload.forEach((prevItem: any) => {
+            const cartIndex = newCart.findIndex(c => c.id === prevItem.id);
+            if (cartIndex >= 0) {
+              newCart[cartIndex].qty -= prevItem.qty;
+              if (newCart[cartIndex].qty <= 0) {
+                newCart.splice(cartIndex, 1);
+              }
+            }
+          });
+        } catch (e) {}
+      }
+    }
+
+    if (!isAppendOnly) {
+      setSelectedPackageId(pkgId);
+    }
     
+    if (!pkgId) {
+      if (!isAppendOnly) setCart(newCart);
+      return;
+    }
+
     const pkg = packages.find(p => p.id === pkgId);
-    if (!pkg) return;
+    if (!pkg) {
+      if (!isAppendOnly) setCart(newCart);
+      return;
+    }
 
     try {
       const parsedPayload = JSON.parse(pkg.payload);
-      let newCart = [...cart];
       let hasError = false;
       let errorDetails = "";
 
@@ -118,7 +147,10 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
 
       if (hasError) {
         setErrorMsg(`Paket tidak dapat digunakan: ${errorDetails}`);
-        setSelectedPackageId("");
+        if (!isAppendOnly) {
+          setSelectedPackageId("");
+          setCart(newCart);
+        }
         return;
       }
 
@@ -137,7 +169,10 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
       setCart(newCart);
     } catch (e) {
       setErrorMsg("Gagal memuat paket.");
-      setSelectedPackageId("");
+      if (!isAppendOnly) {
+        setSelectedPackageId("");
+        setCart(newCart);
+      }
     }
   }
 

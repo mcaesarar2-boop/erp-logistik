@@ -78,13 +78,23 @@ export default function ProfilePage() {
     const file = e.target.files?.[0]
     if (!file) return
     
+    // Validasi ukuran maksimal 2MB
+    if (file.size > 2 * 1024 * 1024) {
+      showMessage('error', "Ukuran file terlalu besar. Maksimal 2MB.")
+      return
+    }
+
     setUploadingImage(true)
     try {
       const fileExt = file.name.split('.').pop()
-      const fileName = `avatar-${Date.now()}.${fileExt}`
+      const fileName = `avatar-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
       
       // Kita gunakan bucket item-images yang sudah ada biar praktis
-      const { error: uploadError } = await supabase.storage.from('item-images').upload(fileName, file)
+      const { error: uploadError } = await supabase.storage.from('item-images').upload(fileName, file, {
+        contentType: file.type,
+        upsert: false
+      })
+      
       if (uploadError) throw uploadError
 
       const { data } = supabase.storage.from('item-images').getPublicUrl(fileName)
@@ -93,9 +103,11 @@ export default function ProfilePage() {
       setAvatarUrl(newAvatarUrl)
       
       // Otomatis simpan ke metadata Supabase
-      await supabase.auth.updateUser({
+      const { error: updateError } = await supabase.auth.updateUser({
         data: { avatar_url: newAvatarUrl }
       })
+      
+      if (updateError) throw updateError
       
       showMessage('success', "Foto profil berhasil diunggah!")
       router.refresh()
