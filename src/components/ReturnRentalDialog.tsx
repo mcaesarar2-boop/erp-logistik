@@ -144,8 +144,10 @@ export function ReturnRentalDialog({ items, activeEvent }: ReturnRentalDialogPro
     const result = await returnBulkRental(formData)
     
     if (result && !result.success) {
-      setErrorMsg(result.error ?? "Terjadi kesalahan sistem.");
-      return
+      if ("error" in result) {
+        setErrorMsg(result.error ?? "Terjadi kesalahan sistem.");
+      }
+      return;
     }
     setOpen(false)
     setCart([]) // Reset state

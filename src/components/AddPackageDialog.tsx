@@ -99,8 +99,10 @@ export function AddPackageDialog({ items }: AddPackageDialogProps) {
     const result = await createPackageTemplate(formData)
     
     if (result && !result.success) {
-      setErrorMsg(result.error ?? "Terjadi kesalahan sistem.");
-      return
+      if ("error" in result) {
+        setErrorMsg(result.error ?? "Terjadi kesalahan sistem.");
+      }
+      return;
     }
     setOpen(false)
     setCart([]) 

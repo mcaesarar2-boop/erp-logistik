@@ -65,8 +65,10 @@ export function AddMaintenanceDialog({ items }: AddMaintenanceDialogProps) {
     const result = await addBulkMaintenance(formData)
     
     if (result && !result.success) {
-      setErrorMsg(result.error ?? "Terjadi kesalahan sistem.");
-      return
+      if ("error" in result) {
+        setErrorMsg(result.error ?? "Terjadi kesalahan sistem.");
+      }
+      return;
     }
     setOpen(false)
     setCart([])

@@ -126,8 +126,10 @@ export function EditPackageDialog({ pkg, items }: EditPackageDialogProps) {
     const result = await updatePackageTemplate(pkg.id, formData)
     
     if (result && !result.success) {
-      setErrorMsg(result.error ?? "Terjadi kesalahan sistem.");
-      return
+      if ("error" in result) {
+        setErrorMsg(result.error ?? "Terjadi kesalahan sistem.");
+      }
+      return;
     }
     setOpen(false)
   }

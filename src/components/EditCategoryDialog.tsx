@@ -21,8 +21,10 @@ export function EditCategoryDialog({ category }: EditCategoryDialogProps) {
     const result = await updateCategory(category.id, formData)
     
     if (result && !result.success) {
-      setErrorMsg(result.error ?? "Terjadi kesalahan saat memperbarui label.");
-      return
+      if ("error" in result) {
+        setErrorMsg(result.error ?? "Terjadi kesalahan saat memperbarui label.");
+      }
+      return;
     }
 
     setOpen(false)

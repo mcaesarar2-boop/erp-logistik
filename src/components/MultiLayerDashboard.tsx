@@ -272,8 +272,8 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
     setIsBatchLoading(false);
     if (res && res.success) {
       setShowBatchDialog(false);
-    } else if (res) {
-      alert(res.error || "Gagal memperbarui kode masal.");
+    } else if (res && "error" in res) {
+      alert(res.error ?? "Gagal memperbarui kode masal.");
     }
   };
 
