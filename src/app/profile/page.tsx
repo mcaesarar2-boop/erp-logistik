@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { supabase, Session } from "@/lib/supabase"
+import { supabase } from "@/lib/supabase"
+import type { Session } from "@supabase/supabase-js"
 import { UserCircle, Upload, Save, Lock, Loader2, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
