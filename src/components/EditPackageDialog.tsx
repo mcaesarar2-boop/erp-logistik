@@ -38,11 +38,15 @@ export function EditPackageDialog({ pkg, items }: EditPackageDialogProps) {
   const [packageName, setPackageName] = useState("")
   const [packageDesc, setPackageDesc] = useState("")
 
+  const [isDummyUser, setIsDummyUser] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       const ADMIN_EMAILS = ["mcaesarar@gmail.com"] 
-      if (data.user?.email && ADMIN_EMAILS.includes(data.user.email.toLowerCase())) setIsAdmin(true)
+      if (data.user?.email) {
+        if (ADMIN_EMAILS.includes(data.user.email.toLowerCase())) setIsAdmin(true)
+        if (data.user.email.toLowerCase() === 'mcaesarar@gmail.com') setIsDummyUser(true)
+      }
     })
   }, [])
 
@@ -103,6 +107,11 @@ export function EditPackageDialog({ pkg, items }: EditPackageDialogProps) {
   }
 
   async function handleSubmit(formData: FormData) {
+    if (isDummyUser) {
+      alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!")
+      return
+    }
+
     setErrorMsg(null)
     if (cart.length === 0) {
       setErrorMsg("Belum ada barang yang dipilih.")

@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Trash2 } from "lucide-react" // Ikon tempat sampah bawaan shadcn
+import { supabase } from "@/lib/supabase"
 import { deleteItemFull, reduceItemQuantity } from "@/app/actions"
 
 interface DeleteItemDialogProps {
@@ -20,14 +21,28 @@ export function DeleteItemDialog({ item }: DeleteItemDialogProps) {
   const [open, setOpen] = useState(false)
   // State untuk melacak mode apa yang sedang aktif di pop-up
   const [mode, setMode] = useState<"selection" | "partial" | "full">("selection")
+  const [isDummyUser, setIsDummyUser] = useState(false)
   const [amount, setAmount] = useState<number>(1)
 
   function handleOpen(isOpen: boolean) {
     setOpen(isOpen)
-    if (isOpen) setMode("selection") // Selalu kembali ke menu awal tiap dibuka
+    if (isOpen) {
+      setMode("selection") // Selalu kembali ke menu awal tiap dibuka
+      supabase.auth.getUser().then(({ data }) => {
+        if (data.user?.email?.toLowerCase() === 'mcaesarar@gmail.com') {
+          setIsDummyUser(true)
+        } else {
+          setIsDummyUser(false)
+        }
+      })
+    }
   }
 
   async function handlePartial() {
+    if (isDummyUser) {
+      alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!")
+      return
+    }
     if (amount > 0 && amount <= item.quantity) {
       await reduceItemQuantity(item.id, amount)
       setOpen(false)
@@ -35,6 +50,10 @@ export function DeleteItemDialog({ item }: DeleteItemDialogProps) {
   }
 
   async function handleFull() {
+    if (isDummyUser) {
+      alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!")
+      return
+    }
     await deleteItemFull(item.id)
     setOpen(false)
   }

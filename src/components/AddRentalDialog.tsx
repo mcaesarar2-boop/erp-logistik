@@ -48,10 +48,14 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
   const [customPrice, setCustomPrice] = useState<number>(0)
 
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isDummyUser, setIsDummyUser] = useState(false)
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       const ADMIN_EMAILS = ["mcaesarar@gmail.com"] 
-      if (data.user?.email && ADMIN_EMAILS.includes(data.user.email.toLowerCase())) setIsAdmin(true)
+      if (data.user?.email) {
+        if (ADMIN_EMAILS.includes(data.user.email.toLowerCase())) setIsAdmin(true)
+        if (data.user.email.toLowerCase() === 'mcaesarar@gmail.com') setIsDummyUser(true)
+      }
     })
   }, [])
 
@@ -220,6 +224,11 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
   }
 
   async function handleSubmit(formData: FormData) {
+    if (isDummyUser) {
+      alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!")
+      return
+    }
+
     setErrorMsg(null)
     setIsSubmitting(true)
     

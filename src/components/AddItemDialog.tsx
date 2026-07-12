@@ -18,14 +18,17 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
   const [open, setOpen] = useState(false)
   const [isExistingMode, setIsExistingMode] = useState(false)
   
-  // CEK ADMIN CLIENT SIDE
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isDummyUser, setIsDummyUser] = useState(false)
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       // TODO: [KEAMANAN] Pindahkan daftar email admin ke environment variables (.env.local) untuk production.
       const ADMIN_EMAILS = ["mcaesarar@gmail.com"]
-      if (data.user?.email && ADMIN_EMAILS.includes(data.user.email.toLowerCase())) {
-        setIsAdmin(true)
+      if (data.user?.email) {
+        const userEmail = data.user.email.toLowerCase()
+        if (ADMIN_EMAILS.includes(userEmail)) setIsAdmin(true)
+        if (userEmail === 'mcaesarar@gmail.com') setIsDummyUser(true)
       }
     })
   }, [])
@@ -59,6 +62,11 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
 
   // FUNGSI CREATE YANG SUDAH DI-UPGRADE
   async function handleCreateNew(formData: FormData) {
+    if (isDummyUser) {
+      alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!")
+      return
+    }
+
     setErrorMsg(null) // Reset error setiap kali tombol simpan ditekan
     
     const result = await createItem(formData)
@@ -75,6 +83,11 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
   }
 
   async function handleAddExisting(formData: FormData) {
+    if (isDummyUser) {
+      alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!")
+      return
+    }
+
     formData.append("itemId", selectedItemId)
     await addStockToExistingItem(formData)
     setSearchQuery("")

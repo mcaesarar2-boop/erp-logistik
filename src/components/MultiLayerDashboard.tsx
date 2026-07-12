@@ -226,6 +226,10 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
   // FUNGSI AKSI HISTORY
   const handleUpdateHistory = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isDummyUser) {
+      alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!");
+      return;
+    }
     if (!editingHistory) return;
     setIsHistoryActionLoading(true);
     const formData = new FormData(e.currentTarget);
@@ -235,6 +239,10 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
   }
 
   const handleDeleteHistory = async () => {
+    if (isDummyUser) {
+      alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!");
+      return;
+    }
     if (!deletingHistory) return;
     setIsHistoryActionLoading(true);
     await deleteHistory(deletingHistory.id);
@@ -243,6 +251,10 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
   }
 
   const handleDeletePackage = async () => {
+    if (isDummyUser) {
+      alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!");
+      return;
+    }
     if (!deletingPackage) return;
     setIsHistoryActionLoading(true);
     await deletePackageTemplate(deletingPackage.id);
@@ -251,6 +263,10 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
   }
 
   const handleBatchRegenerate = async () => {
+    if (isDummyUser) {
+      alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!");
+      return;
+    }
     setIsBatchLoading(true);
     const res = await batchRegenerateCodes();
     setIsBatchLoading(false);

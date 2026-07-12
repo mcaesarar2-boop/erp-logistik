@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
 import { PackagePlus, X, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -27,9 +28,23 @@ export function AddToPackageDialog({
   const [quantity, setQuantity] = useState(1);
   const [footnote, setFootnote] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isDummyUser, setIsDummyUser] = useState(false);
   const router = useRouter();
 
+  useEffect(() => {
+    if (isOpen) {
+      supabase.auth.getUser().then(({ data }) => {
+        if (data.user?.email?.toLowerCase() === 'mcaesarar@gmail.com') {
+          setIsDummyUser(true);
+        } else {
+          setIsDummyUser(false);
+        }
+      });
+    }
+  }, [isOpen]);
+
   const handleAddToPackage = async () => {
+    if (isDummyUser) return alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!");
     if (mode === 'existing' && !selectedPackage) return alert("Pilih paket terlebih dahulu!");
     if (mode === 'new' && !newPackageName.trim()) return alert("Nama paket baru harus diisi!");
     setLoading(true);

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { supabase } from "@/lib/supabase"
 import { updateItem } from "@/app/actions"
 
 // Definisikan tipe data item yang diterima komponen (tambahkan imageUrl)
@@ -28,6 +29,7 @@ interface EditItemDialogProps {
 
 export function EditItemDialog({ item, allCategories }: EditItemDialogProps) {
   const [open, setOpen] = useState(false)
+  const [isDummyUser, setIsDummyUser] = useState(false)
 
   const [available, setAvailable] = useState(item.quantity || 0)
   const [rented, setRented] = useState(item.rentedQuantity || 0)
@@ -75,10 +77,22 @@ export function EditItemDialog({ item, allCategories }: EditItemDialogProps) {
       setAvailable(item.quantity || 0)
       setRented(item.rentedQuantity || 0)
       setMaintenance(item.maintenanceQuantity || 0)
+
+      supabase.auth.getUser().then(({ data }) => {
+        if (data.user?.email?.toLowerCase() === 'mcaesarar@gmail.com') {
+          setIsDummyUser(true)
+        } else {
+          setIsDummyUser(false)
+        }
+      })
     }
   }, [open, item])
 
   async function handleSubmit(formData: FormData) {
+    if (isDummyUser) {
+      alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!")
+      return
+    }
     formData.append("quantity", available.toString());
     formData.append("rentedQuantity", rented.toString());
     formData.append("maintenanceQuantity", maintenance.toString());

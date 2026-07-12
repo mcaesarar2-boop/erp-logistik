@@ -20,12 +20,16 @@ export function AddMaintenanceDialog({ items }: AddMaintenanceDialogProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [showResults, setShowResults] = useState(false)
   const [cart, setCart] = useState<any[]>([])
+  const [isDummyUser, setIsDummyUser] = useState(false)
 
   const [isAdmin, setIsAdmin] = useState(false)
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       const ADMIN_EMAILS = ["mcaesarar@gmail.com"] 
-      if (data.user?.email && ADMIN_EMAILS.includes(data.user.email.toLowerCase())) setIsAdmin(true)
+      if (data.user?.email) {
+        if (ADMIN_EMAILS.includes(data.user.email.toLowerCase())) setIsAdmin(true)
+        if (data.user.email.toLowerCase() === 'mcaesarar@gmail.com') setIsDummyUser(true)
+      }
     })
   }, [])
 
@@ -46,6 +50,11 @@ export function AddMaintenanceDialog({ items }: AddMaintenanceDialogProps) {
   }
 
   async function handleSubmit(formData: FormData) {
+    if (isDummyUser) {
+      alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!")
+      return
+    }
+
     setErrorMsg(null)
     if (cart.length === 0) {
       setErrorMsg("Belum ada aset yang dipilih.")
