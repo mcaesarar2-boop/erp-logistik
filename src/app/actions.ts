@@ -43,7 +43,24 @@ function generatePrefix(categoryName: string) {
   }
 }
 
+// --- FUNGSI HELPER UNTUK VALIDASI AKUN DUMMY ---
+async function validateDummyUser() {
+  // Ambil data user dari sesi yang aktif di server
+  const { data: { user } } = await supabase.auth.getUser();
+
+  // Cek apakah email user adalah akun dummy
+  if (user?.email?.toLowerCase() === 'mcaesarar@gmail.com') {
+    // Jika ya, kembalikan pesan error
+    return { success: false, error: "Akses ditolak: Akun Dummy hanya dapat melihat data (Read-Only)." };
+  }
+  
+  // Jika bukan, kembalikan null (artinya lolos validasi)
+  return null;
+}
+
 export async function createItem(formData: FormData) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
   try {
     const name = formData.get("name") as string
     let code = formData.get("code") as string
@@ -133,6 +150,8 @@ export async function createItem(formData: FormData) {
 
 // --- FUNGSI UPDATE YANG SUDAH DI-UPGRADE ---
 export async function updateItem(id: string, formData: FormData) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
   try {
     const name = formData.get("name") as string
     const code = formData.get("code") as string
@@ -179,6 +198,8 @@ export async function updateItem(id: string, formData: FormData) {
 }
 
 export async function deleteItemFull(id: string) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
   try {
     // Hapus item dari database secara permanen
     await prisma.item.delete({
@@ -193,6 +214,8 @@ export async function deleteItemFull(id: string) {
 }
 
 export async function reduceItemQuantity(id: string, amountToReduce: number) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
   try {
     // Cari item-nya dulu
     const item = await prisma.item.findUnique({ where: { id } })
@@ -215,6 +238,8 @@ export async function reduceItemQuantity(id: string, amountToReduce: number) {
 }
 
 export async function addStockToExistingItem(formData: FormData) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
   try {
     const id = formData.get("itemId") as string
     const quantityToAdd = parseInt(formData.get("quantity") as string) || 0
@@ -241,6 +266,8 @@ export async function addStockToExistingItem(formData: FormData) {
 
 // --- FUNGSI TAMBAH LABEL/KATEGORI BARU ---
 export async function createCategory(formData: FormData) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
   try {
     const name = formData.get("name") as string;
     if (!name) return { success: false, error: "Nama label tidak boleh kosong." };
@@ -264,6 +291,8 @@ export async function createCategory(formData: FormData) {
 
 // --- FUNGSI UPDATE LABEL/KATEGORI ---
 export async function updateCategory(id: string, formData: FormData) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
   try {
     const name = formData.get("name") as string;
     if (!name) return { success: false, error: "Nama label tidak boleh kosong." };
@@ -284,6 +313,8 @@ export async function updateCategory(id: string, formData: FormData) {
 
 // --- FUNGSI DELETE LABEL/KATEGORI ---
 export async function deleteCategory(id: string) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
   try {
     // Cek apakah ada barang yang menggunakan kategori ini
     const itemsCount = await prisma.item.count({ where: { categories: { some: { id } } } });
@@ -301,6 +332,8 @@ export async function deleteCategory(id: string) {
 
 // --- FUNGSI TAMBAH RENTAL MASAL ---
 export async function addBulkRental(formData: FormData) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
   try {
     const payloadStr = formData.get("payload") as string;
     if (!payloadStr) return { success: false, error: "Data kosong." };
@@ -329,6 +362,8 @@ export async function addBulkRental(formData: FormData) {
 
 // --- FUNGSI PENGEMBALIAN RENTAL (BALIK GUDANG) ---
 export async function returnBulkRental(formData: FormData) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
   try {
     const payloadStr = formData.get("payload") as string;
     const historyId = formData.get("historyId") as string | null;
@@ -373,6 +408,8 @@ export async function returnBulkRental(formData: FormData) {
 
 // --- FUNGSI TAMBAH PEMELIHARAAN MASAL ---
 export async function addBulkMaintenance(formData: FormData) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
   try {
     const payloadStr = formData.get("payload") as string;
     if (!payloadStr) return { success: false, error: "Data kosong." };
@@ -399,6 +436,8 @@ export async function addBulkMaintenance(formData: FormData) {
 
 // --- FUNGSI RIWAYAT / TRANSAKSI ---
 export async function createHistory(formData: FormData) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
   try {
     const type = formData.get("type") as string;
     const date = new Date(formData.get("date") as string);
@@ -416,6 +455,8 @@ export async function createHistory(formData: FormData) {
 }
 
 export async function updateHistory(id: string, formData: FormData) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
   try {
     const date = new Date(formData.get("date") as string);
     const description = formData.get("description") as string;
@@ -431,6 +472,8 @@ export async function updateHistory(id: string, formData: FormData) {
 }
 
 export async function deleteHistory(id: string) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
   try {
     await prisma.history.delete({ where: { id } });
     revalidatePath("/");
@@ -442,6 +485,8 @@ export async function deleteHistory(id: string) {
 
 // --- FUNGSI PAKET / TEMPLATE RENTAL ---
 export async function createPackageTemplate(formData: FormData) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
   try {
     const name = formData.get("name") as string;
     const description = formData.get("description") as string;
@@ -461,6 +506,8 @@ export async function createPackageTemplate(formData: FormData) {
 }
 
 export async function updatePackageTemplate(id: string, formData: FormData) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
   try {
     const name = formData.get("name") as string;
     const description = formData.get("description") as string;
@@ -481,6 +528,8 @@ export async function updatePackageTemplate(id: string, formData: FormData) {
 }
 
 export async function deletePackageTemplate(id: string) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
   try {
     await prisma.packageTemplate.delete({ where: { id } });
     revalidatePath("/");
@@ -493,6 +542,8 @@ export async function deletePackageTemplate(id: string) {
 
 // --- FUNGSI BATCH GENERATE (FORMAT ULANG SEMUA KODE MASAL) ---
 export async function batchRegenerateCodes() {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
   try {
     // Ambil semua barang dari yang terlama ke terbaru
     const items = await prisma.item.findMany({

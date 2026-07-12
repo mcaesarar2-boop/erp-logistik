@@ -1,8 +1,18 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { supabase } from "@/lib/supabase";
 
 export async function POST(req: Request) {
   try {
+    // Validasi Akun Dummy di Server (API Route)
+    // NOTE: This relies on the Supabase client being able to access the session from the request context.
+    // For API Routes, it's often more robust to create a dedicated server client.
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+
+    if (authUser?.email?.toLowerCase() === 'mcaesarar@gmail.com') {
+      return NextResponse.json({ error: "Akses ditolak: Akun Dummy hanya dapat melihat data (Read-Only)." }, { status: 403 });
+    }
+
     const body = await req.json();
     const { packageId, newPackageName, item, quantity = 1 } = body;
 
