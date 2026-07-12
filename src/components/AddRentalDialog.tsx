@@ -242,8 +242,8 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
       formData.append("payload", JSON.stringify(cart.map(c => ({ id: c.id, qty: c.qty }))))
       const result = await addBulkRental(formData)
       
-      if (result?.success === false) {
-        setErrorMsg(result.error ?? "Terjadi kesalahan sistem.")
+      if (result && !result.success) {
+        setErrorMsg(result.error ?? "Terjadi kesalahan sistem.");
         setIsSubmitting(false)
         return
       }

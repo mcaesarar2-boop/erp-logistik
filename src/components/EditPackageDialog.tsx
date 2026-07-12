@@ -125,8 +125,8 @@ export function EditPackageDialog({ pkg, items }: EditPackageDialogProps) {
     formData.append("payload", JSON.stringify(cart.map(c => ({ id: c.id, qty: c.qty, name: c.name, code: c.code, price: c.price, rentPercentage: c.rentPercentage, footnote: c.footnote }))))
     const result = await updatePackageTemplate(pkg.id, formData)
     
-    if (result?.success === false) {
-      setErrorMsg(result.error ?? "Terjadi kesalahan sistem.")
+    if (result && !result.success) {
+      setErrorMsg(result.error ?? "Terjadi kesalahan sistem.");
       return
     }
     setOpen(false)

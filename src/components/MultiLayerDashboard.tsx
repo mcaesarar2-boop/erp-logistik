@@ -270,10 +270,10 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
     setIsBatchLoading(true);
     const res = await batchRegenerateCodes();
     setIsBatchLoading(false);
-    if (res?.success) {
+    if (res && res.success) {
       setShowBatchDialog(false);
-    } else {
-      alert(res?.error || "Gagal memperbarui kode masal.");
+    } else if (res) {
+      alert(res.error || "Gagal memperbarui kode masal.");
     }
   };
 

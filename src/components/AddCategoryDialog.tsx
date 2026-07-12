@@ -16,8 +16,8 @@ export function AddCategoryDialog() {
     setErrorMsg(null)
     const result = await createCategory(formData)
     
-    if (result?.success === false) {
-      setErrorMsg(result.error ?? "Terjadi kesalahan saat menambah label.")
+    if (result && !result.success) {
+      setErrorMsg(result.error ?? "Terjadi kesalahan saat menambah label.");
       return
     }
 

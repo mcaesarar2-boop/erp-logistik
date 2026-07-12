@@ -72,8 +72,8 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
     const result = await createItem(formData)
     
     // Jika dari server mengembalikan error (seperti duplikasi kode)
-    if (result?.success === false) {
-      setErrorMsg(result.error ?? "Terjadi kesalahan pada sistem.") // Munculkan kotak merah
+    if (result && !result.success) {
+      setErrorMsg(result.error ?? "Terjadi kesalahan pada sistem."); // Munculkan kotak merah
       return // Berhenti di sini, JANGAN tutup pop-up nya!
     }
 

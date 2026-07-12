@@ -64,8 +64,8 @@ export function AddMaintenanceDialog({ items }: AddMaintenanceDialogProps) {
     formData.append("payload", JSON.stringify(cart.map(c => ({ id: c.id, qty: c.qty }))))
     const result = await addBulkMaintenance(formData)
     
-    if (result?.success === false) {
-      setErrorMsg(result.error ?? "Terjadi kesalahan sistem.")
+    if (result && !result.success) {
+      setErrorMsg(result.error ?? "Terjadi kesalahan sistem.");
       return
     }
     setOpen(false)

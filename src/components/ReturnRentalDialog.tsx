@@ -143,8 +143,8 @@ export function ReturnRentalDialog({ items, activeEvent }: ReturnRentalDialogPro
 
     const result = await returnBulkRental(formData)
     
-    if (result?.success === false) {
-      setErrorMsg(result.error ?? "Terjadi kesalahan sistem.")
+    if (result && !result.success) {
+      setErrorMsg(result.error ?? "Terjadi kesalahan sistem.");
       return
     }
     setOpen(false)
