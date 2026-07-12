@@ -19,8 +19,10 @@ export function DeleteMainCategoryDialog({ category }: DeleteMainCategoryDialogP
     const result = await deleteCategory(category.id)
     
     if (result?.success === false) {
-      setErrorMsg(result.error ?? "Terjadi kesalahan.")
-      return
+      if ("error" in result) {
+        setErrorMsg(result.error ?? "Terjadi kesalahan.");
+      }
+      return;
     }
     setOpen(false)
   }

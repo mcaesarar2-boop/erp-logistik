@@ -21,8 +21,10 @@ export function EditMainCategoryDialog({ category }: EditMainCategoryDialogProps
     const result = await updateCategory(category.id, formData)
     
     if (result?.success === false) {
-      setErrorMsg(result.error ?? "Terjadi kesalahan.")
-      return
+      if ("error" in result) {
+        setErrorMsg(result.error ?? "Terjadi kesalahan.");
+      }
+      return;
     }
     setOpen(false)
   }
