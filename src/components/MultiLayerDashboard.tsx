@@ -325,7 +325,7 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
           <div className="p-6 bg-zinc-900/40 border border-zinc-800 rounded-xl shadow-sm flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-zinc-500 mb-1">Total Valuasi Seluruh Aset</p>
-              <p className="text-4xl font-bold text-blue-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(totalValuation)}</p>
+              <p className="truncate text-2xl font-bold text-blue-400 md:text-4xl">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(totalValuation)}</p>
             </div>
           </div>
 
@@ -649,10 +649,10 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                         ))}
                       </div>
 
-                      <div className="mt-auto flex flex-col xl:flex-row gap-2">
+                      <div className="mt-auto grid grid-cols-2 gap-2 md:flex md:flex-row">
                         <Dialog>
                           <DialogTrigger asChild>
-                            <button className="w-full xl:flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-1.5 rounded-md transition-colors border border-zinc-700 flex items-center justify-center shrink-0 text-sm font-medium gap-2 shadow-sm">
+                            <button className="flex h-full w-full items-center justify-center gap-2 rounded-md border border-zinc-700 bg-zinc-800 py-1.5 text-sm font-medium text-zinc-300 shadow-sm transition-colors hover:bg-zinc-700 md:flex-1">
                                <Eye className="w-4 h-4" /> <span className="inline">Rincian</span>
                             </button>
                           </DialogTrigger>
@@ -698,7 +698,7 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                              </div>
                           </DialogContent>
                         </Dialog>
-                        <div className="w-full xl:flex-1 flex [&_button]:w-full">
+                        <div className="flex w-full [&_button]:w-full md:flex-1">
                           <ReturnRentalDialog items={itemsToDisplay} activeEvent={event} />
                         </div>
                       </div>
