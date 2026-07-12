@@ -104,12 +104,19 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
 
   // CEK ADMIN CLIENT SIDE
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isDummyUser, setIsDummyUser] = useState(false)
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       // TODO: [KEAMANAN] Pindahkan daftar email admin ke environment variables (.env.local) untuk production.
       const ADMIN_EMAILS = ["mcaesarar@gmail.com"]
-      if (data.user?.email && ADMIN_EMAILS.includes(data.user.email.toLowerCase())) {
-        setIsAdmin(true)
+      if (data.user?.email) {
+        const userEmail = data.user.email.toLowerCase();
+        if (ADMIN_EMAILS.includes(userEmail)) {
+          setIsAdmin(true)
+        }
+        if (userEmail === 'mcaesarar@gmail.com') {
+          setIsDummyUser(true)
+        }
       }
     })
   }, [])
