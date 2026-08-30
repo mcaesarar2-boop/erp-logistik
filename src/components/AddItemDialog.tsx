@@ -24,7 +24,7 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       // TODO: [KEAMANAN] Pindahkan daftar email admin ke environment variables (.env.local) untuk production.
-      const ADMIN_EMAILS = ["mcaesarar@gmail.com"]
+      const ADMIN_EMAILS = ["mcaesarar2@gmail.com"]
       if (data.user?.email) {
         const userEmail = data.user.email.toLowerCase()
         if (ADMIN_EMAILS.includes(userEmail)) setIsAdmin(true)

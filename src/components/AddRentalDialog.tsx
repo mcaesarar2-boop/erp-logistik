@@ -51,7 +51,7 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
   const [isDummyUser, setIsDummyUser] = useState(false)
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      const ADMIN_EMAILS = ["mcaesarar@gmail.com"] 
+      const ADMIN_EMAILS = ["mcaesarar2@gmail.com"] 
       if (data.user?.email) {
         if (ADMIN_EMAILS.includes(data.user.email.toLowerCase())) setIsAdmin(true)
         if (data.user.email.toLowerCase() === 'mcaesarar@gmail.com') setIsDummyUser(true)

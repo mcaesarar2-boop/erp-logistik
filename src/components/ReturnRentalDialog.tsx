@@ -32,7 +32,7 @@ export function ReturnRentalDialog({ items, activeEvent }: ReturnRentalDialogPro
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       // TODO: [KEAMANAN] Pindahkan daftar email admin ke environment variables (.env.local) untuk production.
-      const ADMIN_EMAILS = ["mcaesarar@gmail.com"] 
+      const ADMIN_EMAILS = ["mcaesarar2@gmail.com"] 
       if (data.user?.email) {
         if (ADMIN_EMAILS.includes(data.user.email.toLowerCase())) setIsAdmin(true)
         if (data.user.email.toLowerCase() === 'mcaesarar@gmail.com') setIsDummyUser(true)
