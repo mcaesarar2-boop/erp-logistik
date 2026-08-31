@@ -1,10 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { deleteCategory } from "@/app/actions"
 import { Trash2 } from "lucide-react"
+import { supabase } from "@/lib/supabase"
+import { DemoRestrictionDialog } from "@/components/DemoRestrictionDialog"
+import { isDemoEmail, DEMO_MESSAGES } from "@/lib/permissions"
 
 interface DeleteMainCategoryDialogProps {
   category: { id: string; name: string }
@@ -13,8 +16,21 @@ interface DeleteMainCategoryDialogProps {
 export function DeleteMainCategoryDialog({ category }: DeleteMainCategoryDialogProps) {
   const [open, setOpen] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [isDummyUser, setIsDummyUser] = useState(false)
+  const [showDemoWarning, setShowDemoWarning] = useState(false)
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setIsDummyUser(isDemoEmail(data.user?.email))
+    })
+  }, [])
 
   async function handleDelete() {
+    if (isDummyUser) {
+      setShowDemoWarning(true)
+      return
+    }
+
     setErrorMsg(null)
     const result = await deleteCategory(category.id)
     
@@ -45,6 +61,12 @@ export function DeleteMainCategoryDialog({ category }: DeleteMainCategoryDialogP
           </div>
         </div>
       </DialogContent>
+      <DemoRestrictionDialog
+        isOpen={showDemoWarning}
+        onClose={() => setShowDemoWarning(false)}
+        title={DEMO_MESSAGES.delete.title}
+        message="Aksi penghapusan dinonaktifkan pada akun demo. Tidak ada data yang akan dihapus."
+      />
     </Dialog>
   )
 }

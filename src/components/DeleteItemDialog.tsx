@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label"
 import { Trash2 } from "lucide-react" // Ikon tempat sampah bawaan shadcn
 import { supabase } from "@/lib/supabase"
 import { deleteItemFull, reduceItemQuantity } from "@/app/actions"
+import { DemoRestrictionDialog } from "@/components/DemoRestrictionDialog"
+import { isDemoEmail, DEMO_MESSAGES } from "@/lib/permissions"
 
 interface DeleteItemDialogProps {
   item: {
@@ -22,6 +24,7 @@ export function DeleteItemDialog({ item }: DeleteItemDialogProps) {
   // State untuk melacak mode apa yang sedang aktif di pop-up
   const [mode, setMode] = useState<"selection" | "partial" | "full">("selection")
   const [isDummyUser, setIsDummyUser] = useState(false)
+  const [showDemoWarning, setShowDemoWarning] = useState(false)
   const [amount, setAmount] = useState<number>(1)
 
   function handleOpen(isOpen: boolean) {
@@ -29,18 +32,14 @@ export function DeleteItemDialog({ item }: DeleteItemDialogProps) {
     if (isOpen) {
       setMode("selection") // Selalu kembali ke menu awal tiap dibuka
       supabase.auth.getUser().then(({ data }) => {
-        if (data.user?.email?.toLowerCase() === 'mcaesarar@gmail.com') {
-          setIsDummyUser(true)
-        } else {
-          setIsDummyUser(false)
-        }
+        setIsDummyUser(isDemoEmail(data.user?.email))
       })
     }
   }
 
   async function handlePartial() {
     if (isDummyUser) {
-      alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!")
+      setShowDemoWarning(true)
       return
     }
     if (amount > 0 && amount <= item.quantity) {
@@ -51,7 +50,7 @@ export function DeleteItemDialog({ item }: DeleteItemDialogProps) {
 
   async function handleFull() {
     if (isDummyUser) {
-      alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!")
+      setShowDemoWarning(true)
       return
     }
     await deleteItemFull(item.id)
@@ -134,6 +133,12 @@ export function DeleteItemDialog({ item }: DeleteItemDialogProps) {
         )}
 
       </DialogContent>
+      <DemoRestrictionDialog
+        isOpen={showDemoWarning}
+        onClose={() => setShowDemoWarning(false)}
+        title={DEMO_MESSAGES.delete.title}
+        message={DEMO_MESSAGES.delete.message}
+      />
     </Dialog>
   )
 }

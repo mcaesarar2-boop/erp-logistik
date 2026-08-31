@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label"
 import { addBulkRental, createHistory } from "@/app/actions"
 import { supabase } from "@/lib/supabase"
 import { ShoppingCart, Loader2, AlertCircle, Trash2 } from "lucide-react"
+import { DemoRestrictionDialog } from "@/components/DemoRestrictionDialog"
+import { isAdminEmail, isDemoEmail, DEMO_MESSAGES } from "@/lib/permissions"
 
 interface RentPackageDialogProps {
   pkg: {
@@ -36,10 +38,15 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
   const [cart, setCart] = useState<any[]>([])
 
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isDummyUser, setIsDummyUser] = useState(false)
+  const [showDemoWarning, setShowDemoWarning] = useState(false)
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      const ADMIN_EMAILS = ["mcaesarar2@gmail.com"] 
-      if (data.user?.email && ADMIN_EMAILS.includes(data.user.email.toLowerCase())) setIsAdmin(true)
+      if (data.user?.email) {
+        setIsAdmin(isAdminEmail(data.user.email))
+        setIsDummyUser(isDemoEmail(data.user.email))
+      }
     })
   }, [])
 
@@ -104,6 +111,11 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
   const grandTotal = subTotal - discountAmount;
 
   async function handleSubmit(formData: FormData) {
+    if (isDummyUser) {
+      setShowDemoWarning(true)
+      return
+    }
+
     setErrorMsg(null)
     setIsSubmitting(true)
     
@@ -157,7 +169,7 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
     setOpen(false)
   }
 
-  if (!isAdmin) return null;
+  if (!isAdmin && !isDummyUser) return null;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -252,6 +264,12 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
           </form>
         </div>
       </DialogContent>
+      <DemoRestrictionDialog
+        isOpen={showDemoWarning}
+        onClose={() => setShowDemoWarning(false)}
+        title={DEMO_MESSAGES.rental.title}
+        message="Akun yang sedang digunakan adalah akun demo dan bersifat read-only. Pembuatan transaksi rental dinonaktifkan pada akun ini."
+      />
     </Dialog>
   )
 }

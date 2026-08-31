@@ -1,12 +1,15 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { updateCategory } from "@/app/actions"
 import { Pencil } from "lucide-react"
+import { supabase } from "@/lib/supabase"
+import { DemoRestrictionDialog } from "@/components/DemoRestrictionDialog"
+import { isDemoEmail, DEMO_MESSAGES } from "@/lib/permissions"
 
 interface EditMainCategoryDialogProps {
   category: { id: string; name: string }
@@ -15,8 +18,21 @@ interface EditMainCategoryDialogProps {
 export function EditMainCategoryDialog({ category }: EditMainCategoryDialogProps) {
   const [open, setOpen] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [isDummyUser, setIsDummyUser] = useState(false)
+  const [showDemoWarning, setShowDemoWarning] = useState(false)
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setIsDummyUser(isDemoEmail(data.user?.email))
+    })
+  }, [])
 
   async function handleSubmit(formData: FormData) {
+    if (isDummyUser) {
+      setShowDemoWarning(true)
+      return
+    }
+
     setErrorMsg(null)
     const result = await updateCategory(category.id, formData)
     
@@ -44,6 +60,12 @@ export function EditMainCategoryDialog({ category }: EditMainCategoryDialogProps
           <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white">Simpan Perubahan</Button>
         </form>
       </DialogContent>
+      <DemoRestrictionDialog
+        isOpen={showDemoWarning}
+        onClose={() => setShowDemoWarning(false)}
+        title={DEMO_MESSAGES.edit.title}
+        message="Akun ini disediakan untuk tujuan demonstrasi. Perubahan terhadap data kategori dinonaktifkan."
+      />
     </Dialog>
   )
 }

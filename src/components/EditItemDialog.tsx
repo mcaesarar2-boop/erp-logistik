@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { supabase } from "@/lib/supabase"
 import { updateItem } from "@/app/actions"
+import { DemoRestrictionDialog } from "@/components/DemoRestrictionDialog"
+import { isDemoEmail, DEMO_MESSAGES } from "@/lib/permissions"
 
 // Definisikan tipe data item yang diterima komponen (tambahkan imageUrl)
 interface EditItemDialogProps {
@@ -30,6 +32,7 @@ interface EditItemDialogProps {
 export function EditItemDialog({ item, allCategories }: EditItemDialogProps) {
   const [open, setOpen] = useState(false)
   const [isDummyUser, setIsDummyUser] = useState(false)
+  const [showDemoWarning, setShowDemoWarning] = useState(false)
 
   const [available, setAvailable] = useState(item.quantity || 0)
   const [rented, setRented] = useState(item.rentedQuantity || 0)
@@ -79,18 +82,14 @@ export function EditItemDialog({ item, allCategories }: EditItemDialogProps) {
       setMaintenance(item.maintenanceQuantity || 0)
 
       supabase.auth.getUser().then(({ data }) => {
-        if (data.user?.email?.toLowerCase() === 'mcaesarar@gmail.com') {
-          setIsDummyUser(true)
-        } else {
-          setIsDummyUser(false)
-        }
+        setIsDummyUser(isDemoEmail(data.user?.email))
       })
     }
   }, [open, item])
 
   async function handleSubmit(formData: FormData) {
     if (isDummyUser) {
-      alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!")
+      setShowDemoWarning(true)
       return
     }
     formData.append("quantity", available.toString());
@@ -212,6 +211,12 @@ export function EditItemDialog({ item, allCategories }: EditItemDialogProps) {
           </div>
         </form>
       </DialogContent>
+      <DemoRestrictionDialog
+        isOpen={showDemoWarning}
+        onClose={() => setShowDemoWarning(false)}
+        title={DEMO_MESSAGES.edit.title}
+        message={DEMO_MESSAGES.edit.message}
+      />
     </Dialog>
   )
 }

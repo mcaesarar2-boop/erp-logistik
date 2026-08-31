@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label"
 import { createItem, addStockToExistingItem } from "@/app/actions"
 import { supabase } from "@/lib/supabase"
 import { Plus } from "lucide-react"
+import { DemoRestrictionDialog } from "@/components/DemoRestrictionDialog"
+import { isAdminEmail, isDemoEmail, DEMO_MESSAGES } from "@/lib/permissions"
 
 interface AddItemDialogProps {
   items: { id: string; name: string; code: string; quantity: number }[]
@@ -20,15 +22,13 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
   
   const [isAdmin, setIsAdmin] = useState(false)
   const [isDummyUser, setIsDummyUser] = useState(false)
+  const [showDemoWarning, setShowDemoWarning] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      // TODO: [KEAMANAN] Pindahkan daftar email admin ke environment variables (.env.local) untuk production.
-      const ADMIN_EMAILS = ["mcaesarar2@gmail.com"]
       if (data.user?.email) {
-        const userEmail = data.user.email.toLowerCase()
-        if (ADMIN_EMAILS.includes(userEmail)) setIsAdmin(true)
-        if (userEmail === 'mcaesarar@gmail.com') setIsDummyUser(true)
+        setIsAdmin(isAdminEmail(data.user.email))
+        setIsDummyUser(isDemoEmail(data.user.email))
       }
     })
   }, [])
@@ -63,7 +63,7 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
   // FUNGSI CREATE YANG SUDAH DI-UPGRADE
   async function handleCreateNew(formData: FormData) {
     if (isDummyUser) {
-      alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!")
+      setShowDemoWarning(true)
       return
     }
 
@@ -86,7 +86,7 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
 
   async function handleAddExisting(formData: FormData) {
     if (isDummyUser) {
-      alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!")
+      setShowDemoWarning(true)
       return
     }
 
@@ -97,73 +97,88 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
     setOpen(false)
   }
 
-  // Jika bukan admin, jangan tampilkan tombol Tambah Barang sama sekali
-  if (!isAdmin) return null;
+  // Jika bukan admin atau dummy user, jangan tampilkan tombol Tambah Barang sama sekali
+  if (!isAdmin && !isDummyUser) return null;
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => {
-      setOpen(isOpen)
-      if (!isOpen) {
-        setErrorMsg(null) // Bersihkan error jika pop-up ditutup paksa
-        setNewName("")
-        setNewCode("")
-      }
-    }}>
-      <DialogTrigger asChild>
-        <Button className="w-full sm:w-auto shrink-0 bg-zinc-50 text-zinc-950 hover:bg-zinc-200">
-          <Plus className="w-4 h-4 mr-2" /> Tambah Barang
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-50 overflow-visible max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Form Penerimaan Barang</DialogTitle>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={(isOpen) => {
+        setOpen(isOpen)
+        if (!isOpen) {
+          setErrorMsg(null) // Bersihkan error jika pop-up ditutup paksa
+          setNewName("")
+          setNewCode("")
+        }
+      }}>
+        <DialogTrigger asChild>
+          <Button className="w-full sm:w-auto shrink-0 bg-zinc-50 text-zinc-950 hover:bg-zinc-200">
+            <Plus className="w-4 h-4 mr-2" /> Tambah Barang
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-50 overflow-visible max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Form Penerimaan Barang</DialogTitle>
+          </DialogHeader>
 
-        {/* KOTAK PERINGATAN ERROR MERAH */}
-        {errorMsg && (
-          <div className="bg-red-950/50 border border-red-900 text-red-400 text-sm p-3 rounded-md mt-2 flex items-center gap-2">
-            <span className="font-bold">Peringatan:</span> {errorMsg}
+          {/* KOTAK PERINGATAN ERROR MERAH */}
+          {errorMsg && (
+            <div className="bg-red-950/50 border border-red-900 text-red-400 text-sm p-3 rounded-md mb-4 flex items-center gap-2">
+              <span className="font-bold">Gagal:</span> {errorMsg}
+            </div>
+          )}
+
+          {/* TOGGLE TAB MODE */}
+          <div className="flex bg-zinc-900 p-1 rounded-lg border border-zinc-800 mb-6">
+            <button 
+              type="button"
+              onClick={() => {
+                setIsExistingMode(false)
+                setErrorMsg(null)
+              }}
+              className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${!isExistingMode ? 'bg-zinc-800 text-zinc-50 shadow-sm' : 'text-zinc-400 hover:text-zinc-200'}`}
+            >
+              Aset Baru
+            </button>
+            <button 
+              type="button"
+              onClick={() => {
+                setIsExistingMode(true)
+                setErrorMsg(null)
+              }}
+              className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${isExistingMode ? 'bg-zinc-800 text-zinc-50 shadow-sm' : 'text-zinc-400 hover:text-zinc-200'}`}
+            >
+              Tambah Stok Aset Existing
+            </button>
           </div>
-        )}
 
-        <div className="flex bg-zinc-900 p-1 rounded-md mt-2">
-          <button
-            className={`flex-1 text-sm py-1.5 rounded-sm transition-all font-medium ${!isExistingMode ? 'bg-zinc-800 text-zinc-50 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}
-            onClick={() => { setIsExistingMode(false); setErrorMsg(null); }}
-          >
-            Aset Baru
-          </button>
-          <button
-            className={`flex-1 text-sm py-1.5 rounded-sm transition-all font-medium ${isExistingMode ? 'bg-zinc-800 text-zinc-50 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}
-            onClick={() => { setIsExistingMode(true); setErrorMsg(null); }}
-          >
-            Tambah Stok Lama
-          </button>
-        </div>
-
-        {!isExistingMode ? (
-          <form key="form-baru" action={handleCreateNew} className="space-y-4 pt-2">
-            <div className="space-y-2 relative z-50">
-              <Label>Nama Barang</Label>
-              <div className="relative">
+          {/* FORM 1: BARANG BARU */}
+          {!isExistingMode ? (
+            <form action={handleCreateNew} className="space-y-4">
+              <div className="space-y-2 relative">
+                <Label>Nama Barang</Label>
                 <Input 
                   name="name" 
-                  placeholder="Contoh: Pioneer DJM-V10" 
-                  className="bg-zinc-900 border-zinc-800" 
                   value={newName}
-                  onChange={(e) => { setNewName(e.target.value); setShowNameResults(true); }}
+                  onChange={(e) => {
+                    setNewName(e.target.value)
+                    setShowNameResults(true)
+                  }}
                   onFocus={() => setShowNameResults(true)}
                   onBlur={() => setTimeout(() => setShowNameResults(false), 200)}
-                  autoComplete="off"
+                  placeholder="Masukkan nama barang baru" 
+                  className="bg-zinc-900 border-zinc-800" 
                   required 
+                  autoComplete="off"
                 />
-                {showNameResults && newName && suggestedNames.length > 0 && (
-                  <div className="absolute top-full mt-1 left-0 right-0 max-h-[150px] overflow-y-auto overflow-x-hidden bg-zinc-800 border border-zinc-700 rounded-md shadow-2xl z-50">
-                    {suggestedNames.map(name => (
+                
+                {/* AUTO SUGGEST NAMA */}
+                {showNameResults && newName.trim().length > 0 && suggestedNames.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full mt-1 bg-zinc-900 border border-zinc-800 rounded-md shadow-lg max-h-40 overflow-y-auto z-50">
+                    {suggestedNames.map((name, idx) => (
                       <div 
-                        key={name} 
-                        className="p-2 px-3 text-sm text-zinc-200 hover:bg-zinc-700 cursor-pointer border-b border-zinc-700/50 last:border-0"
-                        onMouseDown={(e) => { e.preventDefault(); setNewName(name); setShowNameResults(false); }}
+                        key={idx}
+                        className="p-2.5 text-xs hover:bg-zinc-800 text-zinc-300 hover:text-zinc-100 cursor-pointer"
+                        onMouseDown={() => setNewName(name)}
                       >
                         {name}
                       </div>
@@ -171,143 +186,158 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
                   </div>
                 )}
               </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 relative z-40">
-              <div className="space-y-2">
-                <Label>Kode Aset</Label>
-                <div className="relative">
-                  <Input 
-                    name="code" 
-                    placeholder="Kosongkan untuk otomatis" 
-                    className="bg-zinc-900 border-zinc-800" 
-                    value={newCode}
-                    onChange={(e) => { setNewCode(e.target.value); setShowCodeResults(true); }}
-                    onFocus={() => setShowCodeResults(true)}
-                    onBlur={() => setTimeout(() => setShowCodeResults(false), 200)}
-                    autoComplete="off"
-                  />
-                  {showCodeResults && newCode && suggestedCodes.length > 0 && (
-                    <div className="absolute top-full mt-1 left-0 right-0 max-h-[150px] overflow-y-auto overflow-x-hidden bg-zinc-800 border border-zinc-700 rounded-md shadow-2xl z-50">
-                      {suggestedCodes.map(code => (
-                        <div 
-                          key={code} 
-                          className="p-2 px-3 text-sm text-zinc-200 hover:bg-zinc-700 cursor-pointer border-b border-zinc-700/50 last:border-0"
-                          onMouseDown={(e) => { e.preventDefault(); setNewCode(code); setShowCodeResults(false); }}
-                        >
-                          {code}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Kuantitas Awal</Label>
-                <Input name="quantity" type="number" min="1" placeholder="1" className="bg-zinc-900 border-zinc-800" required />
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Harga Beli Satuan (Rp)</Label>
-                <Input name="price" type="number" min="0" placeholder="0" className="bg-zinc-900 border-zinc-800" required />
-              </div>
-              <div className="space-y-2">
-                <Label>Persentase Sewa (%)</Label>
-                <Input name="rentPercentage" type="number" min="0" step="0.1" placeholder="Contoh: 1.5" className="bg-zinc-900 border-zinc-800" required />
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <Label>Foto Barang (Opsional)</Label>
-              <Input name="image" type="file" accept="image/*" className="bg-zinc-900 border-zinc-800 text-zinc-400 file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-zinc-800 file:text-zinc-300 hover:file:bg-zinc-700 cursor-pointer" />
-            </div>
 
-            <div className="space-y-2">
-              <Label>Label / Kategori (Pilih minimal 1)</Label>
-              <div className="grid grid-cols-2 gap-2 mt-2 bg-zinc-900 p-3 rounded-md border border-zinc-800 max-h-32 overflow-y-auto">
-                {categories.map(cat => (
-                  <label key={cat.id} className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      name="categories" 
-                      value={cat.id} 
-                      className="rounded border-zinc-700 bg-zinc-950 text-emerald-500 focus:ring-emerald-500" 
-                    />
-                    {cat.name}
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Deskripsi</Label>
-              <Input name="description" placeholder="Keterangan singkat" className="bg-zinc-900 border-zinc-800" />
-            </div>
-            <Button type="submit" className="w-full bg-zinc-50 text-zinc-950 hover:bg-zinc-200">
-              Simpan Aset Baru
-            </Button>
-          </form>
-        ) : (
-          /* FORM STOK LAMA */
-          <form key="form-lama" action={handleAddExisting} className="space-y-4 pt-2">
-            <div className="space-y-2 shrink-0">
-              <Label>Cari Barang (Ketik Nama / Kode)</Label>
-              <div className="relative z-50">
+              <div className="space-y-2 relative">
+                <Label>Kode Barang (Opsional)</Label>
                 <Input 
-                  placeholder="Mulai ketik pencarian..." 
-                  className="bg-zinc-900 border-zinc-800"
-                  value={searchQuery}
+                  name="code" 
+                  value={newCode}
                   onChange={(e) => {
-                    setSearchQuery(e.target.value)
-                    setSelectedItemId("")
-                    setShowResults(true)
+                    setNewCode(e.target.value)
+                    setShowCodeResults(true)
                   }}
-                  onFocus={() => setShowResults(true)}
-                  onBlur={() => setTimeout(() => setShowResults(false), 200)}
+                  onFocus={() => setShowCodeResults(true)}
+                  onBlur={() => setTimeout(() => setShowCodeResults(false), 200)}
+                  placeholder="Prefix otomatis jika dikosongkan" 
+                  className="bg-zinc-900 border-zinc-800 uppercase" 
+                  autoComplete="off"
                 />
-                <input type="hidden" name="itemId_validator" value={selectedItemId} required />
 
-                {showResults && searchQuery && (
-                  <div className="absolute top-full mt-1 left-0 right-0 max-h-[150px] overflow-y-auto overflow-x-hidden bg-zinc-800 border border-zinc-700 rounded-md shadow-2xl z-50">
-                  {filteredItems.length > 0 ? (
-                    filteredItems.map(item => (
+                {/* AUTO SUGGEST KODE */}
+                {showCodeResults && newCode.trim().length > 0 && suggestedCodes.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full mt-1 bg-zinc-900 border border-zinc-800 rounded-md shadow-lg max-h-40 overflow-y-auto z-50">
+                    {suggestedCodes.map((code, idx) => (
                       <div 
-                        key={item.id} 
-                        className="p-3 hover:bg-zinc-700 cursor-pointer border-b border-zinc-700/50 last:border-0"
-                        onMouseDown={(e) => {
-                          e.preventDefault()
-                          setSearchQuery(`${item.name} (${item.code})`)
-                          setSelectedItemId(item.id)
-                          setShowResults(false)
-                        }}
+                        key={idx}
+                        className="p-2.5 text-xs hover:bg-zinc-800 text-zinc-300 hover:text-zinc-100 cursor-pointer"
+                        onMouseDown={() => setNewCode(code)}
                       >
-                        <p className="text-sm font-bold text-zinc-200">{item.name}</p>
-                        <div className="flex justify-between mt-1">
-                          <p className="text-xs text-zinc-400">{item.code}</p>
-                          <p className="text-xs text-emerald-400 font-medium">Sisa: {item.quantity}</p>
-                        </div>
+                        {code}
                       </div>
-                    ))
-                  ) : (
-                    <div className="p-3 text-sm text-zinc-500 text-center">
-                      Barang tidak ditemukan.
-                    </div>
-                  )}
+                    ))}
                   </div>
                 )}
               </div>
-            </div>
 
-            <div className="space-y-2 pt-2">
-              <Label>Jumlah Tambahan (Unit Masuk)</Label>
-              <Input name="quantity" type="number" min="1" placeholder="Masukkan jumlah unit" className="bg-zinc-900 border-zinc-800" required />
-            </div>
+              <div className="space-y-2">
+                <Label>Pilih Label / Kategori (Bisa Pilih Lebih Dari 1)</Label>
+                <div className="grid grid-cols-2 gap-2 bg-zinc-900 p-3 rounded-lg border border-zinc-800 max-h-36 overflow-y-auto">
+                  {categories.map(cat => (
+                    <label key={cat.id} className="flex items-center gap-2 text-sm text-zinc-300 hover:text-zinc-100 cursor-pointer">
+                      <input type="checkbox" name="categories" value={cat.id} className="rounded border-zinc-700 bg-zinc-850 text-emerald-600 focus:ring-0 focus:ring-offset-0" />
+                      {cat.name}
+                    </label>
+                  ))}
+                </div>
+              </div>
 
-            <Button type="submit" disabled={!selectedItemId} className="w-full bg-zinc-50 text-zinc-950 hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed">
-              Perbarui Stok Barang
-            </Button>
-          </form>
-        )}
-      </DialogContent>
-    </Dialog>
+              <div className="space-y-2">
+                <Label>Deskripsi / Keterangan Barang</Label>
+                <Input name="description" placeholder="Spesifikasi, kondisi awal, dll." className="bg-zinc-900 border-zinc-800" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Harga Beli Satuan (Rp)</Label>
+                  <Input name="price" type="number" min="0" placeholder="1000000" className="bg-zinc-900 border-zinc-800" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Persentase Sewa/Hari (%)</Label>
+                  <Input name="rentPercentage" type="number" min="0" max="100" step="0.1" defaultValue="5.0" className="bg-zinc-900 border-zinc-800" />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Jumlah Unit Awal (Unit Masuk)</Label>
+                <Input name="quantity" type="number" min="1" placeholder="Masukkan jumlah unit" className="bg-zinc-900 border-zinc-800" required />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Gambar Aset (Foto Barang)</Label>
+                <Input 
+                  name="image" 
+                  type="file" 
+                  accept="image/*" 
+                  className="bg-zinc-900 border-zinc-800 text-zinc-400 file:mr-4 file:py-1.5 file:px-4 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-zinc-200 hover:file:bg-zinc-700 cursor-pointer" 
+                />
+              </div>
+
+              <Button type="submit" className="w-full bg-zinc-50 text-zinc-950 hover:bg-zinc-200">
+                Simpan Barang Baru
+              </Button>
+            </form>
+          ) : (
+            /* FORM 2: TAMBAH STOK EXISTING */
+            <form action={handleAddExisting} className="space-y-4">
+              <div className="space-y-2 relative">
+                <Label>Cari Aset Terdaftar</Label>
+                <div className="relative">
+                  <Input 
+                    type="text" 
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value)
+                      setShowResults(true)
+                    }}
+                    onFocus={() => setShowResults(true)}
+                    placeholder="Ketik nama atau kode barang..." 
+                    className="bg-zinc-900 border-zinc-800" 
+                  />
+                  {selectedItemId && (
+                    <span className="absolute right-3 top-2.5 text-xs bg-emerald-950 text-emerald-400 px-2 py-0.5 rounded border border-emerald-900/50">
+                      Terpilih: {items.find(i => i.id === selectedItemId)?.name}
+                    </span>
+                  )}
+                </div>
+
+                {/* SUGGESTION LIST BOX */}
+                {showResults && searchQuery && (
+                  <div className="absolute left-0 right-0 mt-1 bg-zinc-900 border border-zinc-800 rounded-md shadow-lg max-h-52 overflow-y-auto z-50">
+                    {filteredItems.length > 0 ? (
+                      filteredItems.map(item => (
+                        <div 
+                          key={item.id}
+                          className="p-3 border-b border-zinc-800/50 hover:bg-zinc-850 cursor-pointer"
+                          onClick={() => {
+                            setSelectedItemId(item.id)
+                            setSearchQuery(item.name)
+                            setShowResults(false)
+                          }}
+                        >
+                          <p className="text-sm font-bold text-zinc-200">{item.name}</p>
+                          <div className="flex justify-between mt-1">
+                            <p className="text-xs text-zinc-400">{item.code}</p>
+                            <p className="text-xs text-emerald-400 font-medium">Sisa: {item.quantity}</p>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-3 text-sm text-zinc-500 text-center">
+                        Barang tidak ditemukan.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2 pt-2">
+                <Label>Jumlah Tambahan (Unit Masuk)</Label>
+                <Input name="quantity" type="number" min="1" placeholder="Masukkan jumlah unit" className="bg-zinc-900 border-zinc-800" required />
+              </div>
+
+              <Button type="submit" disabled={!selectedItemId} className="w-full bg-zinc-50 text-zinc-950 hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                Perbarui Stok Barang
+              </Button>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+      <DemoRestrictionDialog
+        isOpen={showDemoWarning}
+        onClose={() => setShowDemoWarning(false)}
+        title={DEMO_MESSAGES.add.title}
+        message="Akun yang sedang digunakan adalah akun demo dan bersifat read-only. Penambahan data inventaris baru dinonaktifkan pada akun ini."
+      />
+    </>
   )
 }

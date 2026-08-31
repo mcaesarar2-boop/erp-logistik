@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { PackagePlus, X, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { DemoRestrictionDialog } from "@/components/DemoRestrictionDialog";
+import { isDemoEmail, DEMO_MESSAGES } from "@/lib/permissions";
 
 type PackageTemplate = { id: string; name: string };
 type Item = { 
@@ -29,22 +31,22 @@ export function AddToPackageDialog({
   const [footnote, setFootnote] = useState("");
   const [loading, setLoading] = useState(false);
   const [isDummyUser, setIsDummyUser] = useState(false);
+  const [showDemoWarning, setShowDemoWarning] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
     if (isOpen) {
       supabase.auth.getUser().then(({ data }) => {
-        if (data.user?.email?.toLowerCase() === 'mcaesarar@gmail.com') {
-          setIsDummyUser(true);
-        } else {
-          setIsDummyUser(false);
-        }
+        setIsDummyUser(isDemoEmail(data.user?.email));
       });
     }
   }, [isOpen]);
 
   const handleAddToPackage = async () => {
-    if (isDummyUser) return alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!");
+    if (isDummyUser) {
+      setShowDemoWarning(true);
+      return;
+    }
     if (mode === 'existing' && !selectedPackage) return alert("Pilih paket terlebih dahulu!");
     if (mode === 'new' && !newPackageName.trim()) return alert("Nama paket baru harus diisi!");
     setLoading(true);
@@ -212,6 +214,12 @@ export function AddToPackageDialog({
           </div>
         </div>
       )}
+      <DemoRestrictionDialog
+        isOpen={showDemoWarning}
+        onClose={() => setShowDemoWarning(false)}
+        title={DEMO_MESSAGES.add.title}
+        message="Akun yang sedang digunakan adalah akun demo dan bersifat read-only. Penambahan aset ke dalam paket rental dinonaktifkan pada akun ini."
+      />
     </>
   );
 }

@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label"
 import { addBulkRental, deletePackageTemplate, createHistory } from "@/app/actions"
 import { supabase } from "@/lib/supabase"
 import { Trash2, Search, ShoppingCart, PackageOpen, AlertCircle, Loader2, PlusCircle } from "lucide-react"
+import { DemoRestrictionDialog } from "@/components/DemoRestrictionDialog"
+import { isAdminEmail, isDemoEmail, DEMO_MESSAGES } from "@/lib/permissions"
 
 interface AddRentalDialogProps {
   items: {
@@ -49,12 +51,13 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
 
   const [isAdmin, setIsAdmin] = useState(false)
   const [isDummyUser, setIsDummyUser] = useState(false)
+  const [showDemoWarning, setShowDemoWarning] = useState(false)
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      const ADMIN_EMAILS = ["mcaesarar2@gmail.com"] 
       if (data.user?.email) {
-        if (ADMIN_EMAILS.includes(data.user.email.toLowerCase())) setIsAdmin(true)
-        if (data.user.email.toLowerCase() === 'mcaesarar@gmail.com') setIsDummyUser(true)
+        setIsAdmin(isAdminEmail(data.user.email))
+        setIsDummyUser(isDemoEmail(data.user.email))
       }
     })
   }, [])
@@ -225,7 +228,7 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
 
   async function handleSubmit(formData: FormData) {
     if (isDummyUser) {
-      alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!")
+      setShowDemoWarning(true)
       return
     }
 
@@ -321,7 +324,7 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
   const discountAmount = subTotal * (discountPercentage / 100)
   const grandTotal = subTotal - discountAmount
 
-  if (!isAdmin) return null;
+  if (!isAdmin && !isDummyUser) return null;
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) { setErrorMsg(null); setWarningMsg(null); }}}>
@@ -543,6 +546,12 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
           </div>
         </form>
       </DialogContent>
+      <DemoRestrictionDialog
+        isOpen={showDemoWarning}
+        onClose={() => setShowDemoWarning(false)}
+        title={DEMO_MESSAGES.rental.title}
+        message="Akun yang sedang digunakan adalah akun demo dan bersifat read-only. Pembuatan transaksi sewa kasir dinonaktifkan pada akun ini."
+      />
     </Dialog>
   )
 }

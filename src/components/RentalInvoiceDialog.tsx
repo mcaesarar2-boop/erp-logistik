@@ -6,6 +6,9 @@ import { Receipt, Printer, Loader2, Trash2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { createHistory } from "@/app/actions"
+import { supabase } from "@/lib/supabase"
+import { DemoRestrictionDialog } from "@/components/DemoRestrictionDialog"
+import { isDemoEmail, DEMO_MESSAGES } from "@/lib/permissions"
 
 interface Item {
   id: string;
@@ -28,6 +31,14 @@ export function RentalInvoiceDialog({ items }: RentalInvoiceDialogProps) {
   const [discountDesc, setDiscountDesc] = useState<string>("")
   const [rentalDays, setRentalDays] = useState<number>(1)
   const [cart, setCart] = useState<any[]>([])
+  const [isDummyUser, setIsDummyUser] = useState(false)
+  const [showDemoWarning, setShowDemoWarning] = useState(false)
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setIsDummyUser(isDemoEmail(data.user?.email))
+    })
+  }, [])
 
   useEffect(() => {
     if (open) {
@@ -62,6 +73,11 @@ export function RentalInvoiceDialog({ items }: RentalInvoiceDialogProps) {
   const grandTotal = subTotal - discountAmount
 
   const handlePrintAndSave = async () => {
+    if (isDummyUser) {
+      setShowDemoWarning(true)
+      return
+    }
+
     setIsSaving(true)
     const formData = new FormData()
     formData.append("type", "INVOICE_RENTAL")
@@ -229,6 +245,12 @@ export function RentalInvoiceDialog({ items }: RentalInvoiceDialogProps) {
           </div>
         </div>
       </DialogContent>
+      <DemoRestrictionDialog
+        isOpen={showDemoWarning}
+        onClose={() => setShowDemoWarning(false)}
+        title={DEMO_MESSAGES.rental.title}
+        message="Akun yang sedang digunakan adalah akun demo dan bersifat read-only. Penyimpanan riwayat invoice rental dinonaktifkan pada akun ini."
+      />
     </Dialog>
   )
 }

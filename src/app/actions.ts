@@ -43,13 +43,15 @@ function generatePrefix(categoryName: string) {
   }
 }
 
+import { isDemoEmail } from "@/lib/permissions"
+
 // --- FUNGSI HELPER UNTUK VALIDASI AKUN DUMMY ---
 async function validateDummyUser() {
   // Ambil data user dari sesi yang aktif di server
   const { data: { user } } = await supabase.auth.getUser();
 
   // Cek apakah email user adalah akun dummy
-  if (user?.email?.toLowerCase() === 'mcaesarar@gmail.com') {
+  if (isDemoEmail(user?.email)) {
     // Jika ya, kembalikan pesan error
     return { success: false, error: "Akses ditolak: Akun Dummy hanya dapat melihat data (Read-Only)." };
   }

@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label"
 import { returnBulkRental } from "@/app/actions"
 import { supabase } from "@/lib/supabase"
 import { Trash2, Search, Undo2 } from "lucide-react"
+import { DemoRestrictionDialog } from "@/components/DemoRestrictionDialog"
+import { isAdminEmail, isDemoEmail, DEMO_MESSAGES } from "@/lib/permissions"
 
 interface ReturnRentalDialogProps {
   items: {
@@ -27,15 +29,14 @@ export function ReturnRentalDialog({ items, activeEvent }: ReturnRentalDialogPro
   const [showResults, setShowResults] = useState(false)
   const [cart, setCart] = useState<any[]>([])
   const [isDummyUser, setIsDummyUser] = useState(false)
-
   const [isAdmin, setIsAdmin] = useState(false)
+  const [showDemoWarning, setShowDemoWarning] = useState(false)
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      // TODO: [KEAMANAN] Pindahkan daftar email admin ke environment variables (.env.local) untuk production.
-      const ADMIN_EMAILS = ["mcaesarar2@gmail.com"] 
       if (data.user?.email) {
-        if (ADMIN_EMAILS.includes(data.user.email.toLowerCase())) setIsAdmin(true)
-        if (data.user.email.toLowerCase() === 'mcaesarar@gmail.com') setIsDummyUser(true)
+        setIsAdmin(isAdminEmail(data.user.email))
+        setIsDummyUser(isDemoEmail(data.user.email))
       }
     })
   }, [])
@@ -105,7 +106,7 @@ export function ReturnRentalDialog({ items, activeEvent }: ReturnRentalDialogPro
 
   async function handleSubmit(formData: FormData) {
     if (isDummyUser) {
-      alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!")
+      setShowDemoWarning(true)
       return
     }
 
@@ -153,7 +154,7 @@ export function ReturnRentalDialog({ items, activeEvent }: ReturnRentalDialogPro
     setCart([]) // Reset state
   }
 
-  if (!isAdmin) return null;
+  if (!isAdmin && !isDummyUser) return null;
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) { setErrorMsg(null); setCart([]); }}}>
@@ -258,6 +259,12 @@ export function ReturnRentalDialog({ items, activeEvent }: ReturnRentalDialogPro
           <Button type="submit" disabled={cart.length === 0} className="w-full bg-blue-600 hover:bg-blue-700 text-white shrink-0 mt-2">Konfirmasi</Button>
         </form>
       </DialogContent>
+      <DemoRestrictionDialog
+        isOpen={showDemoWarning}
+        onClose={() => setShowDemoWarning(false)}
+        title={DEMO_MESSAGES.returnRental.title}
+        message="Akun yang sedang digunakan adalah akun demo dan bersifat read-only. Proses pengembalian aset sewa dinonaktifkan pada akun ini."
+      />
     </Dialog>
   )
 }

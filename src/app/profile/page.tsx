@@ -6,6 +6,8 @@ import type { Session } from "@supabase/supabase-js"
 import { UserCircle, Upload, Save, Lock, Loader2, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { DemoRestrictionDialog } from "@/components/DemoRestrictionDialog"
+import { isDemoEmail, DEMO_MESSAGES } from "@/lib/permissions"
 
 export default function ProfilePage() {
   const [name, setName] = useState("")
@@ -14,6 +16,7 @@ export default function ProfilePage() {
   const [avatarUrl, setAvatarUrl] = useState("")
   
   const [isDummyUser, setIsDummyUser] = useState(false)
+  const [showDemoWarning, setShowDemoWarning] = useState(false)
   // State baru untuk mengelola alur ubah password
   const [updatePasswordStage, setUpdatePasswordStage] = useState<'initial' | 'pending_verification' | 'ready_to_update'>('initial')
   const [isRequestingLink, setIsRequestingLink] = useState(false)
@@ -35,7 +38,7 @@ export default function ProfilePage() {
         setEmail(user.email || "")
         setName(user.user_metadata?.full_name || "")
         setAvatarUrl(user.user_metadata?.avatar_url || "")
-        if (user.email?.toLowerCase() === 'mcaesarar@gmail.com') setIsDummyUser(true)
+        setIsDummyUser(isDemoEmail(user.email))
       }
     }
     fetchUserData()
@@ -66,7 +69,7 @@ export default function ProfilePage() {
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault()
     if (isDummyUser) {
-      alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!")
+      setShowDemoWarning(true)
       return
     }
 
@@ -87,7 +90,7 @@ export default function ProfilePage() {
   // Langkah 1: Kirim link verifikasi ke email
   const handleRequestPasswordUpdate = async () => {
     if (isDummyUser) {
-      alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!")
+      setShowDemoWarning(true)
       return
     }
 
@@ -109,7 +112,7 @@ export default function ProfilePage() {
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault()
     if (isDummyUser) {
-      alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!")
+      setShowDemoWarning(true)
       return
     }
 
@@ -132,7 +135,7 @@ export default function ProfilePage() {
 
   const handleUploadAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (isDummyUser) {
-      alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!")
+      setShowDemoWarning(true)
       if (fileInputRef.current) fileInputRef.current.value = ''
       return
     }
@@ -284,6 +287,12 @@ export default function ProfilePage() {
           )}
         </div>
       </div>
+      <DemoRestrictionDialog
+        isOpen={showDemoWarning}
+        onClose={() => setShowDemoWarning(false)}
+        title={DEMO_MESSAGES.profile.title}
+        message={DEMO_MESSAGES.profile.message}
+      />
     </main>
   )
 }

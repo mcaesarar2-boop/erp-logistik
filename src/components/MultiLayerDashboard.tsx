@@ -16,6 +16,8 @@ import { EditPackageDialog } from "@/components/EditPackageDialog";
 import { PrintPackageDialog } from "@/components/PrintPackageDialog";
 import { updateHistory, deleteHistory, deletePackageTemplate, batchRegenerateCodes } from "@/app/actions";
 import { AddToPackageDialog } from "@/components/AddToPackageDialog";
+import { DemoRestrictionDialog } from "@/components/DemoRestrictionDialog";
+import { isAdminEmail, isDemoEmail, DEMO_MESSAGES } from "@/lib/permissions";
 import Barcode from "react-barcode";
 
 // --- KOMPONEN VISUAL BARCODE SEDERHANA ---
@@ -102,21 +104,28 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
   const [barcodeQuery, setBarcodeQuery] = useState("");
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
-  // CEK ADMIN CLIENT SIDE
+  // CEK PERMISSION CLIENT SIDE
   const [isAdmin, setIsAdmin] = useState(false)
   const [isDummyUser, setIsDummyUser] = useState(false)
+  const [demoModalOpen, setDemoModalOpen] = useState(false)
+  const [demoModalContent, setDemoModalContent] = useState<{ title: string; message: string }>({
+    title: DEMO_MESSAGES.default.title,
+    message: DEMO_MESSAGES.default.message,
+  })
+
+  const triggerDemoWarning = (type: keyof typeof DEMO_MESSAGES = 'default') => {
+    setDemoModalContent({
+      title: DEMO_MESSAGES[type].title,
+      message: DEMO_MESSAGES[type].message,
+    })
+    setDemoModalOpen(true)
+  }
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      // TODO: [KEAMANAN] Pindahkan daftar email admin ke environment variables (.env.local) untuk production.
-      const ADMIN_EMAILS = ["mcaesarar2@gmail.com"]
       if (data.user?.email) {
-        const userEmail = data.user.email.toLowerCase();
-        if (ADMIN_EMAILS.includes(userEmail)) {
-          setIsAdmin(true)
-        }
-        if (userEmail === 'mcaesarar@gmail.com') {
-          setIsDummyUser(true)
-        }
+        setIsAdmin(isAdminEmail(data.user.email))
+        setIsDummyUser(isDemoEmail(data.user.email))
       }
     })
   }, [])
@@ -234,7 +243,8 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
   const handleUpdateHistory = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (isDummyUser) {
-      alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!");
+      setEditingHistory(null);
+      triggerDemoWarning('edit');
       return;
     }
     if (!editingHistory) return;
@@ -247,7 +257,8 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
 
   const handleDeleteHistory = async () => {
     if (isDummyUser) {
-      alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!");
+      setDeletingHistory(null);
+      triggerDemoWarning('delete');
       return;
     }
     if (!deletingHistory) return;
@@ -259,7 +270,8 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
 
   const handleDeletePackage = async () => {
     if (isDummyUser) {
-      alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!");
+      setDeletingPackage(null);
+      triggerDemoWarning('delete');
       return;
     }
     if (!deletingPackage) return;
@@ -271,7 +283,8 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
 
   const handleBatchRegenerate = async () => {
     if (isDummyUser) {
-      alert("Anda tidak bisa mengubah/menghapus/menambahkan item ini, Anda perlu izin!");
+      setShowBatchDialog(false);
+      triggerDemoWarning('batch');
       return;
     }
     setIsBatchLoading(true);
@@ -375,7 +388,7 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                         </div>
                         <h3 className="text-base font-bold text-zinc-100 mb-1 line-clamp-2">{hist.description}</h3>
                       </div>
-                      {isAdmin && (
+                      {(isAdmin || isDummyUser) && (
                         <div className="flex gap-2 shrink-0 md:opacity-0 opacity-100 group-hover:opacity-100 transition-opacity z-10">
                           {/* Tombol Cetak Ulang hanya muncul untuk tipe Invoice Rental */}
                           {hist.type === 'INVOICE_RENTAL' && (
@@ -450,7 +463,7 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                         <h3 className="text-lg font-bold text-blue-400 mb-1 line-clamp-2">{pkg.name}</h3>
                         <p className="text-xs text-zinc-500 line-clamp-1">{pkg.description || 'Tidak ada deskripsi paket.'}</p>
                       </div>
-                      {isAdmin && (
+                      {(isAdmin || isDummyUser) && (
                         <div className="flex gap-2 shrink-0 md:opacity-0 opacity-100 group-hover:opacity-100 transition-opacity z-10">
                           <EditPackageDialog pkg={pkg} items={items} />
                           <button onClick={() => setDeletingPackage(pkg)} className="p-2 bg-red-950/50 hover:bg-red-900 text-red-400 rounded-md transition-colors shadow-sm" title="Hapus Paket"><Trash2 className="w-4 h-4" /></button>
@@ -586,10 +599,10 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                 <option value="price_lowest">Harga Terendah</option>
               </select>
 
-              {isAdmin && <AddCategoryDialog />}
+              {(isAdmin || isDummyUser) && <AddCategoryDialog />}
               
               {/* Tombol Aksi Kategori hanya muncul jika filter bukan 'ALL' */}
-              {isAdmin && selectedCategory !== 'ALL' && currentCategoryObj && (
+              {(isAdmin || isDummyUser) && selectedCategory !== 'ALL' && currentCategoryObj && (
                 <>
                   <EditCategoryDialog category={currentCategoryObj} />
                   <DeleteCategoryDialog category={currentCategoryObj} />
@@ -606,7 +619,7 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
               )}
 
               {/* TAMPILKAN TOMBOL BATCH RAPIKAN KODE JIKA DI TAB ALL ITEMS */}
-              {isAdmin && activeLayer === 'all_items' && (
+              {(isAdmin || isDummyUser) && activeLayer === 'all_items' && (
                 <>
                   <div className="w-px h-4 bg-zinc-700 mx-1 hidden sm:block"></div>
                   <button
@@ -799,7 +812,7 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                         >
                           <Eye className="w-3.5 h-3.5" /> <span className="inline">Detail</span>
                         </button>
-                        {isAdmin && (
+                        {(isAdmin || isDummyUser) && (
                           <>
                             <EditItemDialog item={item} allCategories={categories} />
                             <DeleteItemDialog item={item} />
@@ -1105,6 +1118,14 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
           <button onClick={() => setCartSuccessMsg(false)} className="mt-6 w-full h-10 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 rounded-md border border-zinc-800 transition-colors font-medium">Tutup</button>
         </DialogContent>
       </Dialog>
+
+      {/* MODAL RESTRIKSI AKUN DEMO */}
+      <DemoRestrictionDialog
+        isOpen={demoModalOpen}
+        onClose={() => setDemoModalOpen(false)}
+        title={demoModalContent.title}
+        message={demoModalContent.message}
+      />
 
     </div>
   );
