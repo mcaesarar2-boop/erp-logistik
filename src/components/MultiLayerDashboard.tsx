@@ -95,6 +95,15 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
   const [deletingPackage, setDeletingPackage] = useState<PackageTemplate | null>(null);
   const [addingToCartPkg, setAddingToCartPkg] = useState<PackageTemplate | null>(null);
   const [cartSuccessMsg, setCartSuccessMsg] = useState(false);
+  const [addedItemName, setAddedItemName] = useState<string | null>(null);
+  
+  // Handler Tambah Item ke POS Keranjang Kasir
+  const handleAddItemToCart = (item: Item) => {
+    if (item.quantity <= 0) return;
+    window.dispatchEvent(new CustomEvent('add-to-pos-cart', { detail: { item, itemId: item.id } }));
+    setAddedItemName(item.name);
+    setCartSuccessMsg(true);
+  };
   
   // State untuk Batch Update Kode
   const [showBatchDialog, setShowBatchDialog] = useState(false);
@@ -812,6 +821,20 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                         >
                           <Eye className="w-3.5 h-3.5" /> <span className="inline">Detail</span>
                         </button>
+                        <button 
+                          type="button"
+                          onClick={() => handleAddItemToCart(item)}
+                          disabled={item.quantity <= 0}
+                          title={item.quantity > 0 ? `Tambah ${item.name} ke Keranjang Kasir` : "Stok gudang tidak tersedia"}
+                          className={`flex items-center justify-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors border shadow-sm ${
+                            item.quantity > 0
+                              ? "bg-emerald-950/50 hover:bg-emerald-900/80 text-emerald-400 border-emerald-800/80 hover:text-emerald-300 cursor-pointer"
+                              : "bg-zinc-900/40 text-zinc-600 border-zinc-800/40 cursor-not-allowed opacity-40"
+                          }`}
+                        >
+                          <ShoppingCart className="w-3.5 h-3.5" />
+                          <span className="inline">Keranjang</span>
+                        </button>
                         {(isAdmin || isDummyUser) && (
                           <>
                             <EditItemDialog item={item} allCategories={categories} />
@@ -998,6 +1021,22 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
               
               <div className="p-4 border-t border-zinc-800 bg-zinc-950 shrink-0 flex justify-end gap-2">
                 <button 
+                  type="button"
+                  onClick={() => {
+                    handleAddItemToCart(selectedItemDetail);
+                    setSelectedItemDetail(null);
+                  }}
+                  disabled={selectedItemDetail.quantity <= 0}
+                  className={`px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors flex items-center gap-2 border shadow-sm ${
+                    selectedItemDetail.quantity > 0
+                      ? "bg-emerald-950/60 hover:bg-emerald-900 text-emerald-400 border-emerald-800 hover:text-emerald-300 cursor-pointer"
+                      : "bg-zinc-900 text-zinc-600 border-zinc-800 cursor-not-allowed opacity-50"
+                  }`}
+                >
+                  <ShoppingCart className="w-4 h-4" />
+                  <span>+ Tambah ke Keranjang</span>
+                </button>
+                <button 
                   onClick={() => setSelectedItemDetail(null)}
                   className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-100 rounded-md text-sm font-medium transition-colors border border-zinc-800"
                 >
@@ -1107,15 +1146,21 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
       </Dialog>
 
       {/* KOTAK POPUP SUKSES MASUK KERANJANG */}
-      <Dialog open={cartSuccessMsg} onOpenChange={setCartSuccessMsg}>
+      <Dialog open={cartSuccessMsg} onOpenChange={(open) => { setCartSuccessMsg(open); if (!open) setAddedItemName(null); }}>
         <DialogContent aria-describedby={undefined} className="bg-zinc-950 border-zinc-800 text-zinc-50 sm:max-w-sm flex flex-col items-center justify-center p-6 text-center">
           <DialogTitle className="sr-only">Sukses</DialogTitle>
           <div className="w-12 h-12 rounded-full bg-emerald-950/50 flex items-center justify-center mb-2 border border-emerald-900">
             <ShoppingCart className="w-6 h-6 text-emerald-400" />
           </div>
-          <h3 className="text-lg font-bold text-zinc-100">Berhasil!</h3>
-          <p className="text-sm text-zinc-400 mt-2">Seluruh aset telah dimasukkan ke Keranjang Kasir. Silakan buka Keranjang untuk memproses.</p>
-          <button onClick={() => setCartSuccessMsg(false)} className="mt-6 w-full h-10 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 rounded-md border border-zinc-800 transition-colors font-medium">Tutup</button>
+          <h3 className="text-lg font-bold text-zinc-100">Berhasil Ditambahkan!</h3>
+          <p className="text-sm text-zinc-400 mt-2">
+            {addedItemName ? (
+              <span>Aset <strong>"{addedItemName}"</strong> telah dimasukkan ke Keranjang Kasir.</span>
+            ) : (
+              <span>Seluruh aset telah dimasukkan ke Keranjang Kasir.</span>
+            )} Silakan buka <strong>Keranjang Kasir</strong> di bagian atas untuk meninjau dan memproses sewa.
+          </p>
+          <button onClick={() => { setCartSuccessMsg(false); setAddedItemName(null); }} className="mt-6 w-full h-10 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 rounded-md border border-zinc-800 transition-colors font-medium">Tutup</button>
         </DialogContent>
       </Dialog>
 

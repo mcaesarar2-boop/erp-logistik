@@ -62,12 +62,19 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
     })
   }, [])
 
-  // Custom Event Listener untuk menangkap aksi "Ke Keranjang" dari katalog paket
+  // Custom Event Listener untuk menangkap aksi "Ke Keranjang" dari katalog paket & item individual
   useEffect(() => {
     const handleAddToCart = (e: Event) => {
       const customEvent = e as CustomEvent;
       if (customEvent.detail?.pkgId) {
         handleLoadPackage(customEvent.detail.pkgId, true);
+      } else if (customEvent.detail?.item) {
+        addToCart(customEvent.detail.item);
+      } else if (customEvent.detail?.itemId) {
+        const found = items.find(i => i.id === customEvent.detail.itemId);
+        if (found) {
+          addToCart(found);
+        }
       }
     };
     window.addEventListener('add-to-pos-cart', handleAddToCart);
@@ -81,7 +88,12 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
 
   const addToCart = (item: any) => {
     if (item.quantity <= 0) return
-    if (!cart.find(c => c.id === item.id)) {
+    const existing = cart.find(c => c.id === item.id)
+    if (existing) {
+      if (existing.qty < item.quantity) {
+        setCart(cart.map(c => c.id === item.id ? { ...c, qty: c.qty + 1 } : c))
+      }
+    } else {
       setCart([...cart, { ...item, qty: 1 }])
     }
     setSearchQuery("")
@@ -329,8 +341,14 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) { setErrorMsg(null); setWarningMsg(null); }}}>
       <DialogTrigger asChild>
-        <Button className="w-full sm:w-auto shrink-0 bg-emerald-600 border border-emerald-500 text-white hover:bg-emerald-500 shadow-lg hover:shadow-emerald-900/50 transition-all font-bold">
-          <ShoppingCart className="w-4 h-4 mr-2" /> Keranjang Kasir
+        <Button className="w-full sm:w-auto shrink-0 bg-emerald-600 border border-emerald-500 text-white hover:bg-emerald-500 shadow-lg hover:shadow-emerald-900/50 transition-all font-bold flex items-center justify-center gap-2">
+          <ShoppingCart className="w-4 h-4" />
+          <span>Keranjang Kasir</span>
+          {(cart.length > 0 || customItems.length > 0) && (
+            <span className="bg-emerald-950/90 border border-emerald-400 text-emerald-300 text-xs font-black px-2 py-0.5 rounded-full shadow-inner">
+              {cart.reduce((acc, i) => acc + (i.qty || 1), 0) + customItems.reduce((acc, i) => acc + (i.qty || 1), 0)}
+            </span>
+          )}
         </Button>
       </DialogTrigger>
       <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-50 flex flex-col max-w-[98vw] sm:max-w-[98vw] md:max-w-[98vw] lg:max-w-[98vw] w-full h-[98vh] max-h-[98vh] overflow-hidden p-3 sm:p-6">
