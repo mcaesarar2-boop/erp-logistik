@@ -1,16 +1,22 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Receipt, Printer } from "lucide-react"
+import { ItemThumbnail } from "@/components/ItemThumbnail"
+import { groupItemsByPrimaryCategory } from "@/lib/grouping"
 
 // Ini adalah struktur dari payload yang tersimpan di riwayat
 interface PayloadItem {
+  id?: string;
   name: string;
   code: string;
   qty: number;
   price: number; // Ini adalah harga sewa final per item
   footnote?: string;
+  imageUrl?: string | null;
+  categories?: any[];
+  labels?: any[];
 }
 
 interface History {
@@ -33,6 +39,8 @@ export function ReprintInvoiceDialog({ history, children }: ReprintInvoiceDialog
   // Parse payload dari catatan riwayat
   const invoiceItems: PayloadItem[] = history.payload ? JSON.parse(history.payload) : []
   
+  const groupedItems = useMemo(() => groupItemsByPrimaryCategory(invoiceItems), [invoiceItems]);
+
   let discountPercentage = 0
   let discountDesc = ""
 
@@ -97,30 +105,50 @@ export function ReprintInvoiceDialog({ history, children }: ReprintInvoiceDialog
               Tidak ada data item pada riwayat ini.
             </div>
           ) : (
-            <div className="space-y-3">
-              {invoiceItems.map((item, index) => {
-                // Kalkulasi mundur (reconstruct) untuk mendapatkan harga aslinya sebelum didiskon di kertas Invoice
-                const originalPricePerItem = (discountPercentage > 0 && discountPercentage < 100) ? item.price / (1 - (discountPercentage / 100)) : item.price;
-                return (
-                  <div key={index} className="bg-zinc-900/50 print:bg-transparent border border-zinc-800 print:border-b print:border-zinc-300 print:border-x-0 print:border-t-0 p-3 rounded-lg print:rounded-none flex justify-between items-center gap-4">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-bold text-sm text-zinc-100 print:text-black truncate">{item.name}</p>
-                      <p className="text-xs text-zinc-500 print:text-zinc-600">{item.code}</p>
-                      {item.footnote && (
-                        <p className="text-xs text-zinc-500 print:text-zinc-500 italic mt-0.5">{item.footnote}</p>
-                      )}
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="text-xs text-zinc-400 print:text-zinc-600 mb-0.5">
-                        {item.qty} Unit × {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(originalPricePerItem)}
-                      </div>
-                      <p className="font-bold text-sm text-emerald-400 print:text-black">
-                        {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(originalPricePerItem * item.qty)}
-                      </p>
-                    </div>
+            <div className="space-y-4">
+              {groupedItems.map(group => (
+                <div key={group.categoryName} className="w-full">
+                  {/* Section Header Kategori Utama */}
+                  <div className="w-full flex items-center gap-2 pb-1.5 mb-2.5 border-b border-zinc-800 print:border-zinc-300">
+                    <span className="w-1.5 h-3.5 bg-emerald-500 print:bg-black rounded-full shrink-0"></span>
+                    <h4 className="text-xs font-bold text-zinc-200 print:text-black uppercase tracking-wider">
+                      {group.categoryName}
+                    </h4>
+                    <span className="text-[10px] font-semibold text-zinc-400 print:text-zinc-600 bg-zinc-900 print:bg-zinc-100 border border-zinc-800 print:border-zinc-300 px-1.5 py-0.5 rounded-full">
+                      {group.items.length} {group.items.length > 1 ? "items" : "item"}
+                    </span>
                   </div>
-                )
-              })}
+
+                  <div className="flex flex-col gap-2.5">
+                    {group.items.map((item, index) => {
+                      // Kalkulasi mundur (reconstruct) untuk mendapatkan harga aslinya sebelum didiskon di kertas Invoice
+                      const originalPricePerItem = (discountPercentage > 0 && discountPercentage < 100) ? item.price / (1 - (discountPercentage / 100)) : item.price;
+                      return (
+                        <div key={index} className="bg-zinc-900/50 print:bg-transparent border border-zinc-800 print:border-b print:border-zinc-300 print:border-x-0 print:border-t-0 p-3 rounded-lg print:rounded-none flex justify-between items-center gap-3 sm:gap-4">
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <ItemThumbnail src={item.imageUrl} alt={item.name} className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg shrink-0 print:hidden" iconClassName="w-5 h-5 text-zinc-500" />
+                            <div className="min-w-0 flex-1">
+                              <p className="font-bold text-sm text-zinc-100 print:text-black truncate">{item.name}</p>
+                              <p className="text-xs text-zinc-500 print:text-zinc-600 font-mono">{item.code}</p>
+                              {item.footnote && (
+                                <p className="text-xs text-zinc-500 print:text-zinc-500 italic mt-0.5">{item.footnote}</p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="text-xs text-zinc-400 print:text-zinc-600 mb-0.5">
+                              {item.qty} Unit × {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(originalPricePerItem)}
+                            </div>
+                            <p className="font-bold text-sm text-emerald-400 print:text-black">
+                              {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(originalPricePerItem * item.qty)}
+                            </p>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>

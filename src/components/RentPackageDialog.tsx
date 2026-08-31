@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -10,6 +10,8 @@ import { supabase } from "@/lib/supabase"
 import { ShoppingCart, Loader2, AlertCircle, Trash2 } from "lucide-react"
 import { DemoRestrictionDialog } from "@/components/DemoRestrictionDialog"
 import { isAdminEmail, isDemoEmail, DEMO_MESSAGES } from "@/lib/permissions"
+import { ItemThumbnail } from "@/components/ItemThumbnail"
+import { groupItemsByPrimaryCategory } from "@/lib/grouping"
 
 interface RentPackageDialogProps {
   pkg: {
@@ -22,6 +24,7 @@ interface RentPackageDialogProps {
     name: string
     code: string
     quantity: number
+    imageUrl?: string | null
     price?: number | null
     rentPercentage?: number | null
   }[]
@@ -152,12 +155,14 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
     
     const historyPayload = cart.map((pItem: any) => {
       const rentPricePerItem = ((pItem.price || 0) * (pItem.rentPercentage || 0)) / 100;
+      const realItem = items.find(i => i.id === pItem.id || i.code === pItem.code);
       return {
         id: pItem.id,
         name: pItem.name,
         code: pItem.code,
         qty: pItem.qty,
         returnedQty: 0,
+        imageUrl: realItem?.imageUrl || pItem.imageUrl || null,
         price: rentPricePerItem * rentalDays * (1 - (discountPercentage / 100)),
         footnote: pItem.footnote
       }
@@ -193,38 +198,59 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
           <div className="bg-zinc-900/50 p-4 rounded-xl border border-zinc-800">
             <h3 className="font-bold text-lg text-blue-400 mb-1">{pkg.name}</h3>
             <p className="text-sm text-zinc-400 mb-4">Rincian aset yang akan dikeluarkan dari gudang:</p>
-            <div className="space-y-3">
-              {cart.map((pItem: any, idx: number) => {
-                const isEnough = pItem.quantity >= pItem.qty;
-                const rentPricePerItem = ((pItem.price || 0) * (pItem.rentPercentage || 0)) / 100;
-                return (
-                  <div key={idx} className={`flex flex-col gap-2 p-3 rounded-lg border ${isEnough ? 'bg-zinc-950 border-zinc-800/50' : 'bg-red-950/20 border-red-900/50'}`}>
-                    <div className="flex justify-between items-start">
-                      <div className="min-w-0 flex-1">
-                        <p className={`text-sm font-bold truncate ${isEnough ? 'text-zinc-200' : 'text-red-400'}`}>{pItem.realName}</p>
-                        <p className="text-xs text-zinc-500">{pItem.code} | Max: {pItem.quantity} Unit</p>
-                      </div>
-                      <button type="button" onClick={() => removeItem(pItem.id)} className="text-zinc-500 hover:text-red-400 p-1 bg-zinc-800 rounded shrink-0"><Trash2 className="w-4 h-4"/></button>
-                    </div>
-                    <div className="flex flex-col gap-2 mt-1 pt-2 border-t border-zinc-800/50">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Label className="text-xs">Qty:</Label>
-                          <Input type="number" min="1" max={pItem.quantity} value={pItem.qty} onChange={(e) => updateQty(pItem.id, parseInt(e.target.value)||1)} className="w-20 h-7 text-xs bg-zinc-900 border-zinc-700" />
-                        </div>
-                        <div className="text-right">
-                          <p className="text-[10px] text-zinc-500">Nilai Sewa</p>
-                          <p className="text-sm font-bold text-emerald-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(rentPricePerItem * pItem.qty * rentalDays)}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Label className="text-xs shrink-0 text-zinc-400">Catatan:</Label>
-                        <Input type="text" placeholder="Catatan tambahan (opsional)..." value={pItem.footnote || ""} onChange={(e) => updateFootnote(pItem.id, e.target.value)} className="flex-1 h-7 text-xs bg-zinc-900 border-zinc-700" />
-                      </div>
-                    </div>
+            <div className="space-y-4">
+              {groupItemsByPrimaryCategory(cart, items).map(group => (
+                <div key={group.categoryName} className="w-full">
+                  {/* Section Header Kategori Utama */}
+                  <div className="w-full flex items-center gap-2 pb-1.5 mb-2.5 border-b border-zinc-800">
+                    <span className="w-1.5 h-3.5 bg-blue-500 rounded-full shrink-0"></span>
+                    <h4 className="text-xs font-bold text-zinc-200 uppercase tracking-wider">
+                      {group.categoryName}
+                    </h4>
+                    <span className="text-[10px] font-semibold text-zinc-400 bg-zinc-950 border border-zinc-800 px-1.5 py-0.5 rounded-full">
+                      {group.items.length} {group.items.length > 1 ? "items" : "item"}
+                    </span>
                   </div>
-                )
-              })}
+
+                  <div className="flex flex-col gap-2.5">
+                    {group.items.map((pItem: any, idx: number) => {
+                      const isEnough = pItem.quantity >= pItem.qty;
+                      const rentPricePerItem = ((pItem.price || 0) * (pItem.rentPercentage || 0)) / 100;
+                      const realItem = items.find(i => i.id === pItem.id || i.code === pItem.code);
+                      return (
+                        <div key={idx} className={`flex flex-col gap-2 p-3 rounded-lg border ${isEnough ? 'bg-zinc-950 border-zinc-800/50' : 'bg-red-950/20 border-red-900/50'}`}>
+                          <div className="flex justify-between items-start gap-3">
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <ItemThumbnail src={realItem?.imageUrl || pItem.imageUrl} alt={pItem.realName} className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg shrink-0" iconClassName="w-5 h-5 text-zinc-500" />
+                              <div className="min-w-0 flex-1">
+                                <p className={`text-sm font-bold truncate ${isEnough ? 'text-zinc-200' : 'text-red-400'}`}>{pItem.realName}</p>
+                                <p className="text-xs text-zinc-500 font-mono">{pItem.code} | Max: {pItem.quantity} Unit</p>
+                              </div>
+                            </div>
+                            <button type="button" onClick={() => removeItem(pItem.id)} className="text-zinc-500 hover:text-red-400 p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded shrink-0 transition-colors" title="Hapus dari paket"><Trash2 className="w-4 h-4"/></button>
+                          </div>
+                          <div className="flex flex-col gap-2 mt-1 pt-2 border-t border-zinc-800/50">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <Label className="text-xs shrink-0">Qty:</Label>
+                                <Input type="number" min="1" max={pItem.quantity} value={pItem.qty} onChange={(e) => updateQty(pItem.id, parseInt(e.target.value)||1)} className="w-16 sm:w-20 h-8 text-xs bg-zinc-900 border-zinc-700 text-center font-bold" />
+                              </div>
+                              <div className="text-right shrink-0">
+                                <p className="text-[10px] text-zinc-500">Nilai Sewa</p>
+                                <p className="text-xs sm:text-sm font-bold text-emerald-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(rentPricePerItem * pItem.qty * rentalDays)}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Label className="text-xs shrink-0 text-zinc-400">Catatan:</Label>
+                              <Input type="text" placeholder="Catatan tambahan (opsional)..." value={pItem.footnote || ""} onChange={(e) => updateFootnote(pItem.id, e.target.value)} className="flex-1 h-8 text-xs bg-zinc-900 border-zinc-700" />
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>

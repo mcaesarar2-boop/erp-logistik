@@ -10,6 +10,8 @@ import { supabase } from "@/lib/supabase"
 import { Trash2, Search, Undo2 } from "lucide-react"
 import { DemoRestrictionDialog } from "@/components/DemoRestrictionDialog"
 import { isAdminEmail, isDemoEmail, DEMO_MESSAGES } from "@/lib/permissions"
+import { ItemThumbnail } from "@/components/ItemThumbnail"
+import { groupItemsByPrimaryCategory } from "@/lib/grouping"
 
 interface ReturnRentalDialogProps {
   items: {
@@ -17,6 +19,7 @@ interface ReturnRentalDialogProps {
     name: string
     code: string
     rentedQuantity: number
+    imageUrl?: string | null
   }[]
   activeEvent?: any
 }
@@ -192,15 +195,21 @@ export function ReturnRentalDialog({ items, activeEvent }: ReturnRentalDialogPro
                 value={searchQuery} 
                 onChange={(e) => { setSearchQuery(e.target.value); setShowResults(true) }} 
                 onFocus={() => setShowResults(true)} 
-                onKeyDown={handleBarcodeScan} // Tambahkan event handler di sini
+                onKeyDown={handleBarcodeScan}
               />
               {showResults && searchQuery && (
-                <div className="absolute top-full mt-1 left-0 w-full max-h-[150px] overflow-y-auto overflow-x-hidden bg-zinc-800 border border-zinc-700 rounded-md shadow-2xl z-50">
+                <div className="absolute top-full mt-1 left-0 right-0 max-h-[180px] overflow-y-auto overflow-x-hidden bg-zinc-800 border border-zinc-700 rounded-md shadow-2xl z-50">
                 {filteredItems.length > 0 ? (
                   filteredItems.map((item: any) => (
-                    <div key={item.id} className="p-3 hover:bg-zinc-700 cursor-pointer border-b border-zinc-700/50 flex justify-between items-center" onClick={() => addToCart(item)}>
-                      <div><p className="text-sm font-bold text-zinc-200">{item.name}</p><p className="text-xs text-zinc-400">{item.code}</p></div>
-                      <p className="text-xs font-medium text-amber-400">Sedang Keluar: {item.rentedQuantity}</p>
+                    <div key={item.id} className="p-2.5 hover:bg-zinc-700 cursor-pointer border-b border-zinc-700/50 flex justify-between items-center gap-3" onClick={() => addToCart(item)}>
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <ItemThumbnail src={item.imageUrl} alt={item.name} className="w-9 h-9 sm:w-10 sm:h-10 rounded-md" iconClassName="w-4 h-4 text-zinc-500" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-bold text-zinc-200 truncate">{item.name}</p>
+                          <p className="text-xs text-zinc-400 font-mono">{item.code}</p>
+                        </div>
+                      </div>
+                      <p className="text-xs font-semibold text-amber-400 shrink-0">Sedang Keluar: {item.rentedQuantity}</p>
                     </div>
                   ))
                 ) : (<div className="p-3 text-sm text-zinc-500 text-center">Aset tidak ditemukan / tidak sedang disewa.</div>)}
@@ -235,21 +244,43 @@ export function ReturnRentalDialog({ items, activeEvent }: ReturnRentalDialogPro
             {cart.length === 0 ? (
               <div className="p-6 border border-dashed border-zinc-800 rounded-lg text-center text-zinc-500 text-sm shrink-0">Belum ada barang yang dipilih.</div>
             ) : (
-              <div className="space-y-3 overflow-y-auto overflow-x-hidden pr-2 flex-1">
-                {cart.map(item => (
-                  <div key={item.id} className="bg-zinc-900 p-3 rounded-lg border border-zinc-800 flex flex-col gap-2">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-zinc-100 truncate">{item.name}</p>
-                        <p className="text-xs text-zinc-500">{item.code} | Sedang Keluar: {item.rentedQuantity} Unit</p>
-                      </div>
-                      <button type="button" onClick={() => setCart(cart.filter(c => c.id !== item.id))} className="text-zinc-500 hover:text-red-400 p-1 bg-zinc-800 rounded shrink-0"><Trash2 className="w-4 h-4"/></button>
+              <div className="space-y-4 overflow-y-auto overflow-x-hidden pr-2 flex-1">
+                {groupItemsByPrimaryCategory(cart, items).map(group => (
+                  <div key={group.categoryName} className="w-full">
+                    {/* Section Header Kategori Utama */}
+                    <div className="w-full flex items-center gap-2 pb-1.5 mb-2.5 border-b border-zinc-800">
+                      <span className="w-1.5 h-3.5 bg-blue-500 rounded-full shrink-0"></span>
+                      <h4 className="text-xs font-bold text-zinc-200 uppercase tracking-wider">
+                        {group.categoryName}
+                      </h4>
+                      <span className="text-[10px] font-semibold text-zinc-400 bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded-full">
+                        {group.items.length} {group.items.length > 1 ? "items" : "item"}
+                      </span>
                     </div>
-                    <div className="flex items-center justify-between mt-1 pt-2 border-t border-zinc-800/50">
-                      <div className="flex items-center gap-2 bg-zinc-950 px-2 py-1 rounded-md border border-zinc-700">
-                        <Label className="text-xs text-zinc-400">Kembali:</Label>
-                        <Input type="number" min="1" max={item.rentedQuantity} value={item.qty} onChange={(e) => updateQty(item.id, parseInt(e.target.value)||1)} className="w-20 h-7 text-xs bg-transparent border-none p-0 text-center focus-visible:ring-0" />
-                      </div>
+
+                    <div className="flex flex-col gap-2.5">
+                      {group.items.map(item => (
+                        <div key={item.id} className="bg-zinc-900 p-3 rounded-lg border border-zinc-800 flex flex-col gap-2">
+                          <div className="flex justify-between items-start gap-3">
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <ItemThumbnail src={item.imageUrl} alt={item.name} className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg shrink-0" iconClassName="w-5 h-5 text-zinc-500" />
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-bold text-zinc-100 truncate">{item.name}</p>
+                                <p className="text-xs text-zinc-500 font-mono">{item.code} | Sedang Keluar: {item.rentedQuantity} Unit</p>
+                              </div>
+                            </div>
+                            <button type="button" onClick={() => setCart(cart.filter(c => c.id !== item.id))} className="text-zinc-500 hover:text-red-400 p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded shrink-0 transition-colors" title="Hapus dari daftar"><Trash2 className="w-4 h-4"/></button>
+                          </div>
+                          <div className="flex items-center justify-between mt-1 pt-2 border-t border-zinc-800/50">
+                            <div className="flex items-center gap-2 bg-zinc-950 px-2.5 py-1 rounded-md border border-zinc-700">
+                              <Label className="text-xs shrink-0 text-blue-400 font-medium">Jumlah Kembali:</Label>
+                              <Input type="number" min="1" max={item.rentedQuantity} value={item.qty} onChange={(e) => updateQty(item.id, parseInt(e.target.value)||1)} className="w-16 sm:w-20 h-7 text-xs bg-zinc-900 border-zinc-700 text-center font-bold text-zinc-100" />
+                              <span className="text-xs text-zinc-400">Unit</span>
+                            </div>
+                            <p className="text-[11px] text-zinc-500">Maks: {item.rentedQuantity} Unit</p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}

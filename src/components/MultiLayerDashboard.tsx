@@ -6,7 +6,7 @@ import { DeleteItemDialog } from "@/components/DeleteItemDialog";
 import { AddCategoryDialog } from "@/components/AddCategoryDialog";
 import { EditCategoryDialog } from "@/components/EditCategoryDialog"; 
 import { DeleteCategoryDialog } from "@/components/DeleteCategoryDialog";
-import { Search, ArrowUpDown, History as HistoryIcon, Calendar, Trash2, Pencil, Loader2, Printer, PackageSearch, Eye, ShoppingCart } from "lucide-react";
+import { Search, ArrowUpDown, History as HistoryIcon, Calendar, Trash2, Pencil, Loader2, Printer, PackageSearch, Eye, ShoppingCart, PlusCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger, DialogHeader } from "@/components/ui/dialog";
 import { RentalInvoiceDialog } from "@/components/RentalInvoiceDialog";
@@ -18,6 +18,8 @@ import { updateHistory, deleteHistory, deletePackageTemplate, batchRegenerateCod
 import { AddToPackageDialog } from "@/components/AddToPackageDialog";
 import { DemoRestrictionDialog } from "@/components/DemoRestrictionDialog";
 import { isAdminEmail, isDemoEmail, DEMO_MESSAGES } from "@/lib/permissions";
+import { ItemThumbnail } from "@/components/ItemThumbnail";
+import { groupItemsByPrimaryCategory } from "@/lib/grouping";
 import Barcode from "react-barcode";
 
 // --- KOMPONEN VISUAL BARCODE SEDERHANA ---
@@ -413,14 +415,29 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                       )}
                     </div>
                     
-                    <div className="mt-4 bg-zinc-950/50 rounded-lg p-3 border border-zinc-800/50 max-h-32 overflow-y-auto">
-                      {payloadData.map((d: any, idx: number) => (
-                        <div key={idx} className="flex justify-between items-start text-xs py-1 border-b border-zinc-800/50 last:border-0 gap-2">
-                          <div className="flex flex-col min-w-0 flex-1">
-                            <span className="text-zinc-300 truncate">{d.name} <span className="text-zinc-600">({d.code})</span></span>
-                            {d.footnote && <span className="text-[10px] text-zinc-500 italic truncate" title={d.footnote}>{d.footnote}</span>}
+                    <div className="mt-4 bg-zinc-950/50 rounded-lg p-2.5 border border-zinc-800/50 max-h-36 overflow-y-auto space-y-3">
+                      {groupItemsByPrimaryCategory(payloadData, items).map(group => (
+                        <div key={group.categoryName} className="w-full">
+                          <div className="w-full flex items-center gap-1.5 pb-1 mb-1.5 border-b border-zinc-800/80">
+                            <span className="w-1.5 h-3 bg-emerald-500 rounded-full shrink-0"></span>
+                            <span className="text-[10px] font-bold text-zinc-300 uppercase tracking-wider">
+                              {group.categoryName}
+                            </span>
+                            <span className="text-[9px] font-medium text-zinc-500 bg-zinc-900 px-1.5 py-0.2 rounded-full border border-zinc-800">
+                              {group.items.length}
+                            </span>
                           </div>
-                          <span className="font-bold text-emerald-400 shrink-0 mt-0.5">{d.qty} Unit x {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(d.price)}</span>
+                          <div className="flex flex-col gap-1">
+                            {group.items.map((d: any, idx: number) => (
+                              <div key={idx} className="flex justify-between items-start text-xs py-1 border-b border-zinc-850/40 last:border-0 gap-2">
+                                <div className="flex flex-col min-w-0 flex-1">
+                                  <span className="text-zinc-300 truncate font-medium">{d.name} <span className="text-zinc-600 font-mono">({d.code})</span></span>
+                                  {d.footnote && <span className="text-[10px] text-zinc-500 italic truncate" title={d.footnote}>{d.footnote}</span>}
+                                </div>
+                                <span className="font-bold text-emerald-400 shrink-0 mt-0.5 text-[11px]">{d.qty} Unit × {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(d.price)}</span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -480,35 +497,52 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                       )}
                     </div>
 
-                    <div className="bg-zinc-950/50 rounded-lg p-2 border border-zinc-800/50 max-h-40 overflow-y-auto mb-4 space-y-1">
-                      {packageItems.map((item: Item, idx: number) => {
-                        const pkgItemData = payloadData.find((p:any) => p.id === item.id);
-                        return (
-                        <div key={idx} className="flex justify-between items-start text-xs py-1.5 border-b border-zinc-800/50 last:border-0 gap-2">
-                          <div className="flex items-center gap-2 flex-1 min-w-0">
-                            {item.imageUrl ? (
-                               <div 
-                                 className="w-7 h-7 rounded border border-zinc-700 overflow-hidden shrink-0 cursor-pointer hover:opacity-75 transition-opacity"
-                                 onClick={() => setSelectedImage(item.imageUrl!)}
-                                 title="Lihat Foto"
-                               >
-                                 <img src={item.imageUrl} className="w-full h-full object-cover" alt="thumb" />
-                               </div>
-                            ) : (
-                               <div className="w-7 h-7 rounded border border-zinc-800 bg-zinc-900 shrink-0 flex items-center justify-center text-[8px] text-zinc-600">
-                                  N/A
-                               </div>
-                            )}
-                            <div className="flex flex-col min-w-0 flex-1">
-                              <span className="text-zinc-300 truncate">{item.name}</span>
-                              {pkgItemData?.footnote && (
-                                <span className="text-[10px] text-zinc-500 italic truncate" title={pkgItemData.footnote}>{pkgItemData.footnote}</span>
-                              )}
-                            </div>
+                    <div className="bg-zinc-950/50 rounded-lg p-2.5 border border-zinc-800/50 max-h-44 overflow-y-auto mb-4 space-y-3">
+                      {groupItemsByPrimaryCategory(packageItems, items).map(group => (
+                        <div key={group.categoryName} className="w-full">
+                          <div className="w-full flex items-center gap-1.5 pb-1 mb-1.5 border-b border-zinc-800/80">
+                            <span className="w-1.5 h-3 bg-blue-500 rounded-full shrink-0"></span>
+                            <span className="text-[10px] font-bold text-blue-300 uppercase tracking-wider">
+                              {group.categoryName}
+                            </span>
+                            <span className="text-[9px] font-medium text-zinc-500 bg-zinc-900 px-1.5 py-0.2 rounded-full border border-zinc-800">
+                              {group.items.length}
+                            </span>
                           </div>
-                          <span className="font-bold text-zinc-400 shrink-0 bg-zinc-900 px-2 py-0.5 rounded mt-0.5">{pkgItemData?.qty || 0} Unit</span>
+
+                          <div className="flex flex-col gap-1">
+                            {group.items.map((item: any, idx: number) => {
+                              const pkgItemData = payloadData.find((p:any) => p.id === item.id);
+                              return (
+                                <div key={idx} className="flex justify-between items-start text-xs py-1 border-b border-zinc-850/40 last:border-0 gap-2">
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    {item.imageUrl ? (
+                                       <div 
+                                         className="w-7 h-7 rounded border border-zinc-700 overflow-hidden shrink-0 cursor-pointer hover:opacity-75 transition-opacity"
+                                         onClick={() => setSelectedImage(item.imageUrl!)}
+                                         title="Lihat Foto"
+                                       >
+                                         <img src={item.imageUrl} className="w-full h-full object-cover" alt="thumb" />
+                                       </div>
+                                    ) : (
+                                       <div className="w-7 h-7 rounded border border-zinc-800 bg-zinc-900 shrink-0 flex items-center justify-center text-[8px] text-zinc-600">
+                                          N/A
+                                       </div>
+                                    )}
+                                    <div className="flex flex-col min-w-0 flex-1">
+                                      <span className="text-zinc-300 truncate font-medium">{item.name}</span>
+                                      {pkgItemData?.footnote && (
+                                        <span className="text-[10px] text-zinc-500 italic truncate" title={pkgItemData.footnote}>{pkgItemData.footnote}</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <span className="font-bold text-zinc-400 shrink-0 bg-zinc-900 px-2 py-0.5 rounded text-[11px] mt-0.5">{pkgItemData?.qty || 0} Unit</span>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
-                      )})}
+                      ))}
                     </div>
 
                     <div className="mt-auto pt-4 border-t border-zinc-800 flex justify-between items-center">
@@ -662,11 +696,47 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                       <h4 className="font-bold text-amber-400 mb-1 line-clamp-1" title={event.description || ""}>{event.description?.split('|')[0].replace('Event:', '').trim()}</h4>
                       <p className="text-xs text-zinc-500 mb-4">{new Date(event.date).toLocaleDateString('id-ID', { dateStyle: 'full' })}</p>
                       
-                      <div className="flex-1 bg-zinc-950/50 rounded-lg p-3 border border-zinc-800/50 mb-4 max-h-32 overflow-y-auto space-y-2">
-                        {activeItems.map((p: any, idx: number) => (
-                          <div key={idx} className="flex justify-between items-center text-xs border-b border-zinc-800/50 pb-1.5 last:border-0 last:pb-0">
-                            <span className="text-zinc-300 truncate pr-2 flex-1">{p.name}</span>
-                            <span className="text-amber-400 font-bold shrink-0 bg-amber-950/30 px-2 py-0.5 rounded">{p.qty - (p.returnedQty || 0)} Unit</span>
+                      <div className="flex-1 bg-zinc-950/50 rounded-lg p-2.5 border border-zinc-800/50 mb-4 max-h-40 overflow-y-auto space-y-3">
+                        {groupItemsByPrimaryCategory(activeItems, items).map(group => (
+                          <div key={group.categoryName} className="w-full">
+                            <div className="w-full flex items-center gap-1.5 pb-1 mb-1.5 border-b border-zinc-800/80">
+                              <span className="w-1.5 h-3 bg-amber-400 rounded-full shrink-0"></span>
+                              <span className="text-[10px] font-bold text-amber-300 uppercase tracking-wider">
+                                {group.categoryName}
+                              </span>
+                              <span className="text-[9px] font-medium text-zinc-500 bg-zinc-900 px-1.5 py-0.2 rounded-full border border-zinc-800">
+                                {group.items.length}
+                              </span>
+                            </div>
+
+                            <div className="flex flex-col gap-1">
+                              {group.items.map((p: any, idx: number) => {
+                                const realItem = items.find(i => i.id === p.id || i.code === p.code);
+                                const isCustom = p.code === "LAYANAN" || (p.id && String(p.id).startsWith("custom-"));
+                                return (
+                                  <div key={idx} className="flex justify-between items-center text-xs py-1 border-b border-zinc-850/40 last:border-0 gap-2">
+                                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                                      {isCustom ? (
+                                        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded bg-blue-950/40 border border-blue-800/40 flex items-center justify-center shrink-0 text-blue-400">
+                                          <PlusCircle className="w-3.5 h-3.5" />
+                                        </div>
+                                      ) : (
+                                        <ItemThumbnail
+                                          src={realItem?.imageUrl || p.imageUrl}
+                                          alt={p.name}
+                                          className="w-7 h-7 sm:w-8 sm:h-8 rounded shrink-0"
+                                          iconClassName="w-3.5 h-3.5 text-zinc-500"
+                                        />
+                                      )}
+                                      <span className="text-zinc-300 truncate font-medium">{p.name}</span>
+                                    </div>
+                                    <span className="text-amber-400 font-bold shrink-0 bg-amber-950/40 border border-amber-900/40 px-2 py-0.5 rounded text-[11px]">
+                                      {p.qty - (p.returnedQty || 0)} Unit
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -684,33 +754,56 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                                  Rincian Event: <span className="text-amber-400">{event.description?.split('|')[0].replace('Event:', '').trim()}</span>
                                </DialogTitle>
                              </DialogHeader>
-                             <div className="flex-1 overflow-y-auto space-y-3 pr-2 py-2">
-                               {payload.map((pItem: any, idx: number) => {
-                                  const realItem = items.find(i => i.id === pItem.id || i.code === pItem.code);
-                                  return (
-                                     <div key={idx} className="flex gap-4 p-3 bg-zinc-900/50 border border-zinc-800 rounded-lg items-center">
-                                        <div className="w-16 h-16 shrink-0 bg-zinc-950 border border-zinc-800 rounded-md overflow-hidden flex items-center justify-center">
-                                           {realItem?.imageUrl ? (
-                                              <img src={realItem.imageUrl} alt={pItem.name} className="w-full h-full object-cover" />
-                                           ) : (
-                                              <span className="text-[10px] text-zinc-600 font-bold">NO IMG</span>
-                                           )}
-                                        </div>
-                                        <div className="flex-1 min-w-0 flex flex-col justify-center">
-                                           <h5 className="font-bold text-sm text-zinc-100 truncate">{pItem.name}</h5>
-                                           <p className="text-xs text-zinc-500">{pItem.code}</p>
-                                           {pItem.footnote && <p className="text-[10px] text-zinc-400 italic mt-0.5 truncate" title={pItem.footnote}>{pItem.footnote}</p>}
-                                           {(pItem.returnedQty > 0) && (
-                                              <p className="text-[10px] font-bold text-amber-500 mt-1 bg-amber-950/30 w-max px-1.5 py-0.5 rounded">Kembali: {pItem.returnedQty} / {pItem.qty}</p>
-                                           )}
-                                        </div>
-                                        <div className="text-right shrink-0 flex flex-col justify-center">
-                                           <p className="text-xs text-zinc-400 mb-0.5">{pItem.qty} Unit × {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(pItem.price)}</p>
-                                           <p className="font-bold text-sm text-emerald-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(pItem.qty * pItem.price)}</p>
-                                        </div>
-                                     </div>
-                                  )
-                               })}
+                             <div className="flex-1 overflow-y-auto space-y-4 pr-2 py-2">
+                               {groupItemsByPrimaryCategory(payload, items).map(group => (
+                                 <div key={group.categoryName} className="w-full">
+                                   {/* Section Header Kategori Utama Event */}
+                                   <div className="w-full flex items-center gap-2 pb-1.5 mb-2.5 border-b border-zinc-800">
+                                     <span className="w-1.5 h-3.5 bg-amber-400 rounded-full shrink-0"></span>
+                                     <h4 className="text-xs font-bold text-zinc-200 uppercase tracking-wider">
+                                       {group.categoryName}
+                                     </h4>
+                                     <span className="text-[10px] font-semibold text-zinc-400 bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded-full">
+                                       {group.items.length} {group.items.length > 1 ? "items" : "item"}
+                                     </span>
+                                   </div>
+
+                                   <div className="flex flex-col gap-2.5">
+                                     {group.items.map((pItem: any, idx: number) => {
+                                        const realItem = items.find(i => i.id === pItem.id || i.code === pItem.code);
+                                        const isCustom = pItem.code === "LAYANAN" || (pItem.id && String(pItem.id).startsWith("custom-"));
+                                        return (
+                                           <div key={idx} className="flex gap-3 sm:gap-4 p-2.5 sm:p-3 bg-zinc-900/50 border border-zinc-800 rounded-lg items-center">
+                                              {isCustom ? (
+                                                <div className="w-12 h-12 sm:w-14 sm:h-14 shrink-0 bg-blue-950/40 border border-blue-800/50 rounded-lg flex items-center justify-center text-blue-400">
+                                                  <PlusCircle className="w-6 h-6" />
+                                                </div>
+                                              ) : (
+                                                <ItemThumbnail
+                                                  src={realItem?.imageUrl || pItem.imageUrl}
+                                                  alt={pItem.name}
+                                                  className="w-12 h-12 sm:w-14 sm:h-14 shrink-0 rounded-lg"
+                                                  iconClassName="w-5 h-5 text-zinc-500"
+                                                />
+                                              )}
+                                              <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                                 <h5 className="font-bold text-sm text-zinc-100 truncate">{pItem.name}</h5>
+                                                 <p className="text-xs text-zinc-500 font-mono">{pItem.code}</p>
+                                                 {pItem.footnote && <p className="text-[10px] text-zinc-400 italic mt-0.5 truncate" title={pItem.footnote}>{pItem.footnote}</p>}
+                                                 {(pItem.returnedQty > 0) && (
+                                                    <p className="text-[10px] font-bold text-amber-500 mt-1 bg-amber-950/30 w-max px-1.5 py-0.5 rounded">Kembali: {pItem.returnedQty} / {pItem.qty}</p>
+                                                 )}
+                                              </div>
+                                              <div className="text-right shrink-0 flex flex-col justify-center">
+                                                 <p className="text-xs text-zinc-400 mb-0.5">{pItem.qty} Unit × {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(pItem.price)}</p>
+                                                 <p className="font-bold text-sm text-emerald-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(pItem.qty * pItem.price)}</p>
+                                              </div>
+                                           </div>
+                                        )
+                                     })}
+                                   </div>
+                                 </div>
+                               ))}
                              </div>
                              <div className="shrink-0 mt-2 pt-4 border-t border-zinc-800 flex justify-between items-center bg-zinc-900/40 p-4 rounded-xl border">
                                <span className="text-sm font-medium text-zinc-400">Total Harga Sewa Keseluruhan:</span>

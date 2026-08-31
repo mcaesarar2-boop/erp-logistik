@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Receipt, Printer, Loader2, Trash2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
@@ -9,12 +9,17 @@ import { createHistory } from "@/app/actions"
 import { supabase } from "@/lib/supabase"
 import { DemoRestrictionDialog } from "@/components/DemoRestrictionDialog"
 import { isDemoEmail, DEMO_MESSAGES } from "@/lib/permissions"
+import { ItemThumbnail } from "@/components/ItemThumbnail"
+import { groupItemsByPrimaryCategory } from "@/lib/grouping"
 
 interface Item {
   id: string;
   code: string;
   name: string;
   rentedQuantity: number;
+  imageUrl?: string | null;
+  categories?: any[];
+  labels?: any[];
   price?: number | null;
   rentPercentage?: number | null;
 }
@@ -64,6 +69,8 @@ export function RentalInvoiceDialog({ items }: RentalInvoiceDialogProps) {
     setCart(cart.filter(c => c.id !== id))
   }
 
+  const groupedCart = useMemo(() => groupItemsByPrimaryCategory(cart, items), [cart, items]);
+
   const subTotal = cart.reduce((acc, item) => {
     const rentPricePerItem = ((item.price || 0) * (item.rentPercentage || 0)) / 100
     return acc + (item.qty * rentPricePerItem * rentalDays)
@@ -100,6 +107,7 @@ export function RentalInvoiceDialog({ items }: RentalInvoiceDialogProps) {
       name: i.name, 
       code: i.code, 
       qty: i.qty, 
+      imageUrl: i.imageUrl || null,
       price: (((i.price || 0) * (i.rentPercentage || 0)) / 100) * rentalDays * (1 - (discountPercentage / 100)),
       footnote: i.footnote || ""
     }))
@@ -115,7 +123,7 @@ export function RentalInvoiceDialog({ items }: RentalInvoiceDialogProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <button className="w-full sm:w-auto bg-emerald-950/50 hover:bg-emerald-900 text-emerald-400 px-3 py-1.5 rounded-md transition-colors border border-emerald-900 flex items-center justify-center shrink-0 text-sm font-medium gap-2 shadow-sm">
+        <button className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-emerald-400 px-3 py-1.5 rounded-md text-sm font-medium transition-colors border border-zinc-700 shadow-sm">
           <Receipt className="w-4 h-4" />
           <span className="inline">Rincian Rental</span>
         </button>
@@ -155,46 +163,65 @@ export function RentalInvoiceDialog({ items }: RentalInvoiceDialogProps) {
               Tidak ada aset yang sedang disewakan dalam daftar ini.
             </div>
           ) : (
-            <div className="space-y-3">
-              {cart.map(item => {
-                const rentPricePerItem = ((item.price || 0) * (item.rentPercentage || 0)) / 100;
-                // Diskon belum diterapkan di list ini, hanya di subtotal & total
-                const totalItemRent = rentPricePerItem * item.qty * rentalDays;
-                return (
-                  <div key={item.id} className="bg-zinc-900/50 print:bg-transparent border border-zinc-800 print:border-b print:border-zinc-300 print:border-x-0 print:border-t-0 p-3 rounded-lg print:rounded-none flex flex-col gap-2">
-                    <div className="flex justify-between items-start">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-bold text-sm text-zinc-100 print:text-black truncate">{item.name}</p>
-                        <p className="text-xs text-zinc-500 print:text-zinc-600">{item.code} <span className="print:hidden">| Sedang Keluar: {item.rentedQuantity} Unit</span></p>
-                        {item.footnote && <p className="text-xs text-zinc-500 print:text-zinc-500 italic mt-0.5 print:block hidden">{item.footnote}</p>}
-                      </div>
-                      <button type="button" onClick={() => removeItem(item.id)} className="print:hidden text-zinc-500 hover:text-red-400 p-1 bg-zinc-800 rounded shrink-0"><Trash2 className="w-4 h-4"/></button>
-                    </div>
-                    
-                    <div className="flex flex-col gap-2 mt-1 pt-2 border-t border-zinc-800/50 print:border-none print:pt-0 print:mt-0">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 print:hidden">
-                          <Label className="text-xs">Qty:</Label>
-                          <Input type="number" min="1" max={item.rentedQuantity} value={item.qty} onChange={(e) => updateQty(item.id, parseInt(e.target.value)||1)} className="w-20 h-7 text-xs bg-zinc-950 border-zinc-700" />
-                        </div>
-                        <div className="text-right shrink-0">
-                          <div className="text-xs text-zinc-400 print:text-zinc-600 mb-0.5 hidden print:block">
-                            {item.qty} Unit × {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(rentPricePerItem)}
-                          </div>
-                          <p className="text-[10px] text-zinc-500 print:hidden">Nilai Sewa</p>
-                          <p className="font-bold text-sm text-emerald-400 print:text-black">
-                            {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(totalItemRent)}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 print:hidden">
-                        <Label className="text-xs shrink-0 text-zinc-400">Catatan:</Label>
-                        <Input type="text" placeholder="Catatan tambahan (opsional)..." value={item.footnote || ""} onChange={(e) => updateFootnote(item.id, e.target.value)} className="flex-1 h-7 text-xs bg-zinc-950 border-zinc-700" />
-                      </div>
-                    </div>
+            <div className="space-y-4">
+              {groupedCart.map(group => (
+                <div key={group.categoryName} className="w-full">
+                  {/* Section Header Kategori Utama */}
+                  <div className="w-full flex items-center gap-2 pb-1.5 mb-2.5 border-b border-zinc-800 print:border-zinc-300">
+                    <span className="w-1.5 h-3.5 bg-emerald-500 print:bg-black rounded-full shrink-0"></span>
+                    <h4 className="text-xs font-bold text-zinc-200 print:text-black uppercase tracking-wider">
+                      {group.categoryName}
+                    </h4>
+                    <span className="text-[10px] font-semibold text-zinc-400 print:text-zinc-600 bg-zinc-900 print:bg-zinc-100 border border-zinc-800 print:border-zinc-300 px-1.5 py-0.5 rounded-full">
+                      {group.items.length} {group.items.length > 1 ? "items" : "item"}
+                    </span>
                   </div>
-                )
-              })}
+
+                  <div className="flex flex-col gap-2.5">
+                    {group.items.map(item => {
+                      const rentPricePerItem = ((item.price || 0) * (item.rentPercentage || 0)) / 100;
+                      const totalItemRent = rentPricePerItem * item.qty * rentalDays;
+                      return (
+                        <div key={item.id} className="bg-zinc-900/50 print:bg-transparent border border-zinc-800 print:border-b print:border-zinc-300 print:border-x-0 print:border-t-0 p-3 rounded-lg print:rounded-none flex flex-col gap-2">
+                          <div className="flex justify-between items-start gap-3">
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <ItemThumbnail src={item.imageUrl} alt={item.name} className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg shrink-0 print:hidden" iconClassName="w-5 h-5 text-zinc-500" />
+                              <div className="min-w-0 flex-1">
+                                <p className="font-bold text-sm text-zinc-100 print:text-black truncate">{item.name}</p>
+                                <p className="text-xs text-zinc-500 print:text-zinc-600 font-mono">{item.code} <span className="print:hidden">| Sedang Keluar: {item.rentedQuantity} Unit</span></p>
+                                {item.footnote && <p className="text-xs text-zinc-500 print:text-zinc-500 italic mt-0.5 print:block hidden">{item.footnote}</p>}
+                              </div>
+                            </div>
+                            <button type="button" onClick={() => removeItem(item.id)} className="print:hidden text-zinc-500 hover:text-red-400 p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded shrink-0 transition-colors"><Trash2 className="w-4 h-4"/></button>
+                          </div>
+                          
+                          <div className="flex flex-col gap-2 mt-1 pt-2 border-t border-zinc-800/50 print:border-none print:pt-0 print:mt-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 print:hidden">
+                                <Label className="text-xs shrink-0">Qty:</Label>
+                                <Input type="number" min="1" max={item.rentedQuantity} value={item.qty} onChange={(e) => updateQty(item.id, parseInt(e.target.value)||1)} className="w-16 sm:w-20 h-8 text-xs bg-zinc-950 border-zinc-700 text-center font-bold" />
+                              </div>
+                              <div className="text-right shrink-0">
+                                <div className="text-xs text-zinc-400 print:text-zinc-600 mb-0.5 hidden print:block">
+                                  {item.qty} Unit × {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(rentPricePerItem)}
+                                </div>
+                                <p className="text-[10px] text-zinc-500 print:hidden">Nilai Sewa</p>
+                                <p className="font-bold text-sm text-emerald-400 print:text-black">
+                                  {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(totalItemRent)}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 print:hidden">
+                              <Label className="text-xs shrink-0 text-zinc-400">Catatan:</Label>
+                              <Input type="text" placeholder="Catatan tambahan (opsional)..." value={item.footnote || ""} onChange={(e) => updateFootnote(item.id, e.target.value)} className="flex-1 h-7 text-xs bg-zinc-950 border-zinc-700" />
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>

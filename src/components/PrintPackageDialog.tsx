@@ -1,9 +1,9 @@
 "use client"
 
-import React from "react"
-import { useState } from "react"
+import React, { useState, useMemo } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Printer, Package } from "lucide-react"
+import { groupItemsByPrimaryCategory } from "@/lib/grouping"
 
 interface PrintPackageDialogProps {
   pkg: {
@@ -23,15 +23,24 @@ export function PrintPackageDialog({ pkg, items }: PrintPackageDialogProps) {
   
   const payloadData = pkg.payload ? JSON.parse(pkg.payload) : []
   
-  const packageItems = payloadData.map((pItem: any) => {
-    const itemDetail = items.find((i: any) => i.id === pItem.id)
-    const rentPricePerItem = itemDetail ? ((itemDetail.price || 0) * (itemDetail.rentPercentage || 0)) / 100 : 0
-    return {
-      ...pItem,
-      rentPricePerItem,
-      totalRent: rentPricePerItem * pItem.qty
-    }
-  })
+  const packageItems = useMemo(() => {
+    return payloadData.map((pItem: any) => {
+      const itemDetail = items.find((i: any) => i.id === pItem.id)
+      const rentPricePerItem = itemDetail ? ((itemDetail.price || 0) * (itemDetail.rentPercentage || 0)) / 100 : 0
+      return {
+        ...pItem,
+        imageUrl: itemDetail?.imageUrl || pItem.imageUrl || null,
+        categories: itemDetail?.categories || pItem.categories,
+        labels: itemDetail?.labels || pItem.labels,
+        rentPricePerItem,
+        totalRent: rentPricePerItem * pItem.qty
+      }
+    })
+  }, [payloadData, items])
+
+  const groupedPackageItems = useMemo(() => {
+    return groupItemsByPrimaryCategory(packageItems, items);
+  }, [packageItems, items]);
 
   const grandTotal = packageItems.reduce((acc: number, item: any) => acc + item.totalRent, 0)
   const totalUnits = packageItems.reduce((acc: number, item: any) => acc + item.qty, 0)
@@ -71,23 +80,40 @@ export function PrintPackageDialog({ pkg, items }: PrintPackageDialogProps) {
               Tidak ada aset di dalam paket ini.
             </div>
           ) : (
-            <div className="space-y-3">
-              {packageItems.map((item: any, index: number) => (
-                <div key={index} className="bg-zinc-900/50 print:bg-transparent border border-zinc-800 print:border-b print:border-zinc-300 print:border-x-0 print:border-t-0 p-3 rounded-lg print:rounded-none flex justify-between items-center gap-4">
-                  <div className="min-w-0 flex-1">
-                    <p className="font-bold text-sm text-zinc-100 print:text-black truncate">{item.name}</p>
-                    <p className="text-xs text-zinc-500 print:text-zinc-600">{item.code}</p>
-                    {item.footnote && (
-                      <p className="text-xs text-zinc-500 print:text-zinc-500 italic mt-0.5">{item.footnote}</p>
-                    )}
+            <div className="space-y-4">
+              {groupedPackageItems.map(group => (
+                <div key={group.categoryName} className="w-full">
+                  {/* Section Header Kategori Utama */}
+                  <div className="w-full flex items-center gap-2 pb-1.5 mb-2.5 border-b border-zinc-800 print:border-zinc-300">
+                    <span className="w-1.5 h-3.5 bg-blue-500 print:bg-black rounded-full shrink-0"></span>
+                    <h4 className="text-xs font-bold text-zinc-200 print:text-black uppercase tracking-wider">
+                      {group.categoryName}
+                    </h4>
+                    <span className="text-[10px] font-semibold text-zinc-400 print:text-zinc-600 bg-zinc-900 print:bg-zinc-100 border border-zinc-800 print:border-zinc-300 px-1.5 py-0.5 rounded-full">
+                      {group.items.length} {group.items.length > 1 ? "items" : "item"}
+                    </span>
                   </div>
-                  <div className="text-right shrink-0">
-                    <div className="text-xs text-zinc-400 print:text-zinc-600 mb-0.5">
-                      {item.qty} Unit × {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.rentPricePerItem)}
-                    </div>
-                    <p className="font-bold text-sm text-blue-400 print:text-black">
-                      {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.totalRent)}
-                    </p>
+
+                  <div className="flex flex-col gap-2.5">
+                    {group.items.map((item: any, index: number) => (
+                      <div key={index} className="bg-zinc-900/50 print:bg-transparent border border-zinc-800 print:border-b print:border-zinc-300 print:border-x-0 print:border-t-0 p-3 rounded-lg print:rounded-none flex justify-between items-center gap-4">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold text-sm text-zinc-100 print:text-black truncate">{item.name}</p>
+                          <p className="text-xs text-zinc-500 print:text-zinc-600 font-mono">{item.code}</p>
+                          {item.footnote && (
+                            <p className="text-xs text-zinc-500 print:text-zinc-500 italic mt-0.5">{item.footnote}</p>
+                          )}
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="text-xs text-zinc-400 print:text-zinc-600 mb-0.5">
+                            {item.qty} Unit × {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.rentPricePerItem)}
+                          </div>
+                          <p className="font-bold text-sm text-blue-400 print:text-black">
+                            {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.totalRent)}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               ))}

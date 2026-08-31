@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -10,6 +10,8 @@ import { supabase } from "@/lib/supabase"
 import { Trash2, Search, Pencil } from "lucide-react"
 import { DemoRestrictionDialog } from "@/components/DemoRestrictionDialog"
 import { isAdminEmail, isDemoEmail, DEMO_MESSAGES } from "@/lib/permissions"
+import { ItemThumbnail } from "@/components/ItemThumbnail"
+import { groupItemsByPrimaryCategory } from "@/lib/grouping"
 
 interface EditPackageDialogProps {
   pkg: {
@@ -25,6 +27,7 @@ interface EditPackageDialogProps {
     quantity: number
     rentedQuantity: number
     maintenanceQuantity: number
+    imageUrl?: string | null
     price?: number | null
     rentPercentage?: number | null
   }[]
@@ -170,49 +173,78 @@ export function EditPackageDialog({ pkg, items }: EditPackageDialogProps) {
 
           <div className="space-y-2 shrink-0">
             <Label>Cari Aset Tambahan</Label>
-            <div className="relative z-50">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
-              <Input placeholder="Ketik nama atau kode aset..." className="pl-9 bg-zinc-900 border-zinc-800" value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setShowResults(true) }} onFocus={() => setShowResults(true)} />
-              {showResults && searchQuery && (
-                <div className="absolute top-full mt-1 left-0 right-0 max-h-[150px] overflow-y-auto overflow-x-hidden bg-zinc-800 border border-zinc-700 rounded-md shadow-2xl z-50">
-                {filteredItems.length > 0 ? (
-                  filteredItems.map(item => (
-                    <div key={item.id} className="p-3 hover:bg-zinc-700 cursor-pointer border-b border-zinc-700/50 flex justify-between items-center" onClick={() => addToCart(item)}>
-                      <div><p className="text-sm font-bold text-zinc-200">{item.name}</p><p className="text-xs text-zinc-400">{item.code}</p></div>
+              <div className="relative z-50">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                <Input placeholder="Ketik nama atau kode aset..." className="pl-9 bg-zinc-900 border-zinc-800" value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setShowResults(true) }} onFocus={() => setShowResults(true)} />
+                {showResults && searchQuery && (
+                  <div className="absolute top-full mt-1 left-0 right-0 max-h-[180px] overflow-y-auto overflow-x-hidden bg-zinc-800 border border-zinc-700 rounded-md shadow-2xl z-50">
+                  {filteredItems.length > 0 ? (
+                    filteredItems.map(item => (
+                      <div key={item.id} className="p-2.5 hover:bg-zinc-700 cursor-pointer border-b border-zinc-700/50 flex justify-between items-center gap-3" onClick={() => addToCart(item)}>
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          <ItemThumbnail src={item.imageUrl} alt={item.name} className="w-9 h-9 sm:w-10 sm:h-10 rounded-md" iconClassName="w-4 h-4 text-zinc-500" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-bold text-zinc-200 truncate">{item.name}</p>
+                            <p className="text-xs text-zinc-400 font-mono">{item.code}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (<div className="p-3 text-sm text-zinc-500 text-center">Aset tidak ditemukan.</div>)}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-2 flex-1 overflow-hidden">
+              <Label className="shrink-0">Daftar Barang dalam Paket</Label>
+              {cart.length === 0 ? (
+                <div className="p-6 border border-dashed border-zinc-800 rounded-lg text-center text-zinc-500 text-sm shrink-0">Belum ada barang yang dipilih.</div>
+              ) : (
+                <div className="space-y-4 overflow-y-auto overflow-x-hidden pr-2 flex-1">
+                  {groupItemsByPrimaryCategory(cart, items).map(group => (
+                    <div key={group.categoryName} className="w-full">
+                      {/* Section Header Kategori Utama */}
+                      <div className="w-full flex items-center gap-2 pb-1.5 mb-2.5 border-b border-zinc-800">
+                        <span className="w-1.5 h-3.5 bg-blue-500 rounded-full shrink-0"></span>
+                        <h4 className="text-xs font-bold text-zinc-200 uppercase tracking-wider">
+                          {group.categoryName}
+                        </h4>
+                        <span className="text-[10px] font-semibold text-zinc-400 bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded-full">
+                          {group.items.length} {group.items.length > 1 ? "items" : "item"}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-col gap-2.5">
+                        {group.items.map(item => {
+                          const totalInventory = (item.quantity || 0) + (item.rentedQuantity || 0) + (item.maintenanceQuantity || 0);
+                          return (
+                            <div key={item.id} className="bg-zinc-900 p-3 rounded-lg border border-zinc-800 flex flex-col gap-2">
+                              <div className="flex justify-between items-start gap-3">
+                                <div className="flex items-center gap-3 min-w-0 flex-1">
+                                  <ItemThumbnail src={item.imageUrl} alt={item.name} className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg shrink-0" iconClassName="w-5 h-5 text-zinc-500" />
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-bold text-zinc-100 truncate">{item.name}</p>
+                                    <p className="text-xs text-zinc-500 font-mono">{item.code} | Max: {totalInventory}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <Label className="text-xs">Qty:</Label>
+                                  <Input type="number" min="1" max={totalInventory} value={item.qty} onChange={(e) => updateQty(item.id, parseInt(e.target.value)||1)} className="w-16 h-8 text-xs bg-zinc-950 border-zinc-700 text-center font-bold" />
+                                  <button type="button" onClick={() => setCart(cart.filter(c => c.id !== item.id))} className="text-zinc-500 hover:text-red-400 p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded shrink-0 transition-colors"><Trash2 className="w-4 h-4"/></button>
+                                </div>
+                              </div>
+                              <Input placeholder="Catatan / Footnote (Opsional)" className="h-8 text-xs bg-zinc-950 border-zinc-800 text-zinc-300" value={item.footnote || ''} onChange={(e) => updateFootnote(item.id, e.target.value)} />
+                            </div>
+                          )
+                        })}
+                      </div>
                     </div>
-                  ))
-                ) : (<div className="p-3 text-sm text-zinc-500 text-center">Aset tidak ditemukan.</div>)}
+                  ))}
                 </div>
               )}
             </div>
-          </div>
-
-          <div className="flex flex-col gap-2 pt-2 flex-1 overflow-hidden">
-            <Label className="shrink-0">Daftar Barang dalam Paket</Label>
-            {cart.length === 0 ? (
-              <div className="p-6 border border-dashed border-zinc-800 rounded-lg text-center text-zinc-500 text-sm shrink-0">Belum ada barang yang dipilih.</div>
-            ) : (
-              <div className="space-y-3 overflow-y-auto overflow-x-hidden pr-2 flex-1">
-                {cart.map(item => {
-                  const totalInventory = (item.quantity || 0) + (item.rentedQuantity || 0) + (item.maintenanceQuantity || 0);
-                  return (
-                    <div key={item.id} className="bg-zinc-900 p-3 rounded-lg border border-zinc-800 flex flex-col gap-2">
-                      <div className="flex justify-between items-center gap-2">
-                        <div className="flex-1"><p className="text-sm font-bold text-zinc-100">{item.name}</p><p className="text-xs text-zinc-500">{item.code} | Max: {totalInventory}</p></div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <Label className="text-xs">Qty:</Label>
-                          <Input type="number" min="1" max={totalInventory} value={item.qty} onChange={(e) => updateQty(item.id, parseInt(e.target.value)||1)} className="w-16 h-7 text-xs bg-zinc-950 border-zinc-700 text-center" />
-                        </div>
-                        <button type="button" onClick={() => setCart(cart.filter(c => c.id !== item.id))} className="text-zinc-500 hover:text-red-400 p-1 bg-zinc-800 rounded shrink-0"><Trash2 className="w-4 h-4"/></button>
-                      </div>
-                      <Input placeholder="Catatan / Footnote (Opsional)" className="h-7 text-xs bg-zinc-950 border-zinc-800 text-zinc-300" value={item.footnote || ''} onChange={(e) => updateFootnote(item.id, e.target.value)} />
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-          <Button type="submit" disabled={cart.length === 0 || !packageName} className="w-full bg-amber-600 hover:bg-amber-700 text-white shrink-0 mt-2">Simpan Perubahan Paket</Button>
+            <Button type="submit" disabled={cart.length === 0 || !packageName} className="w-full bg-amber-600 hover:bg-amber-700 text-white shrink-0 mt-2">Simpan Perubahan Paket</Button>
         </form>
       </DialogContent>
       <DemoRestrictionDialog
