@@ -7,7 +7,7 @@ import { DeleteItemDialog } from "@/components/DeleteItemDialog";
 import { AddCategoryDialog } from "@/components/AddCategoryDialog";
 import { EditCategoryDialog } from "@/components/EditCategoryDialog"; 
 import { DeleteCategoryDialog } from "@/components/DeleteCategoryDialog";
-import { Search, ArrowUpDown, History as HistoryIcon, Calendar, Trash2, Pencil, Loader2, Printer, PackageSearch, Eye, ShoppingCart, PlusCircle, Copy, Check, RefreshCw } from "lucide-react";
+import { Search, ArrowUpDown, History as HistoryIcon, Calendar, Trash2, Pencil, Loader2, Printer, PackageSearch, Eye, ShoppingCart, PlusCircle, Copy, Check, RefreshCw, Plus } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger, DialogHeader } from "@/components/ui/dialog";
 import { RentalInvoiceDialog } from "@/components/RentalInvoiceDialog";
@@ -914,11 +914,11 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                         ))}
                       </div>
 
-                      <div className="mt-auto grid grid-cols-2 gap-2 md:flex md:flex-row">
+                      <div className="mt-auto grid grid-cols-1 sm:grid-cols-3 gap-2">
                         <Dialog>
                           <DialogTrigger asChild>
-                            <button className="flex h-full w-full items-center justify-center gap-2 rounded-md border border-zinc-700 bg-zinc-800 py-1.5 text-sm font-medium text-zinc-300 shadow-sm transition-colors hover:bg-zinc-700 md:flex-1">
-                               <Eye className="w-4 h-4" /> <span className="inline">Rincian</span>
+                            <button className="flex h-full w-full items-center justify-center gap-1.5 rounded-md border border-zinc-700 bg-zinc-800 py-1.5 px-2 text-xs sm:text-sm font-medium text-zinc-300 shadow-sm transition-colors hover:bg-zinc-700">
+                               <Eye className="w-4 h-4 shrink-0" /> <span className="inline">Rincian</span>
                             </button>
                           </DialogTrigger>
                           <DialogContent aria-describedby={undefined} className="bg-zinc-950 border-zinc-800 text-zinc-50 max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
@@ -987,7 +987,27 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                              </div>
                           </DialogContent>
                         </Dialog>
-                        <div className="flex w-full [&_button]:w-full md:flex-1">
+
+                        {(isAdmin || isDummyUser) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const cleanName = event.description?.split('|')[0].replace('Event:', '').trim() || "Event";
+                              window.dispatchEvent(new CustomEvent('open-addon-rental', {
+                                detail: {
+                                  eventId: event.id,
+                                  eventName: cleanName
+                                }
+                              }));
+                            }}
+                            className="flex h-full w-full items-center justify-center gap-1.5 rounded-md border border-emerald-800/80 bg-emerald-950/40 py-1.5 px-2 text-xs sm:text-sm font-medium text-emerald-400 shadow-sm transition-colors hover:bg-emerald-900/60 hover:text-emerald-300"
+                            title="Tambah Barang Susulan ke Event Ini"
+                          >
+                            <Plus className="w-4 h-4 shrink-0" /> <span className="inline">Tambah Barang</span>
+                          </button>
+                        )}
+
+                        <div className="flex w-full [&_button]:w-full">
                           <ReturnRentalDialog items={itemsToDisplay} activeEvent={event} />
                         </div>
                       </div>

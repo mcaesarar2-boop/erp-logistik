@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { addBulkRental, deletePackageTemplate, createHistory } from "@/app/actions"
+import { checkoutRental, deletePackageTemplate } from "@/app/actions"
 import { supabase } from "@/lib/supabase"
 import { Trash2, Search, ShoppingCart, PackageOpen, AlertCircle, Loader2, PlusCircle } from "lucide-react"
 import { DemoRestrictionDialog } from "@/components/DemoRestrictionDialog"
@@ -45,6 +45,8 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
   const [discountPercentage, setDiscountPercentage] = useState<number | "">(0)
   const [discountDesc, setDiscountDesc] = useState<string>("")
   const [eventName, setEventName] = useState<string>("")
+  const [targetEventId, setTargetEventId] = useState<string>("")
+  const [targetEventName, setTargetEventName] = useState<string>("")
   const [rentalDays, setRentalDays] = useState<number | "">(1)
   
   const [customItems, setCustomItems] = useState<{id: string, name: string, qty: number | "", price: number | "", footnote: string}[]>([])
@@ -65,7 +67,7 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
     })
   }, [])
 
-  // Custom Event Listener untuk menangkap aksi "Ke Keranjang" dari katalog paket & item individual
+  // Custom Event Listener untuk menangkap aksi "Ke Keranjang" dari katalog paket & item individual, serta mode Tambah Barang Susulan
   useEffect(() => {
     const handleAddToCart = (e: Event) => {
       const customEvent = e as CustomEvent;
@@ -80,8 +82,33 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
         }
       }
     };
+
+    const handleOpenAddonRental = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail?.eventId) {
+        const evId = customEvent.detail.eventId;
+        const evName = customEvent.detail.eventName || "Event";
+        setTargetEventId(evId);
+        setTargetEventName(evName);
+        setEventName(`${evName} (Tambahan)`);
+        setCart([]);
+        setCustomItems([]);
+        setSelectedPackageId("");
+        setDiscountPercentage(0);
+        setDiscountDesc("");
+        setRentalDays(1);
+        setErrorMsg(null);
+        setWarningMsg(null);
+        setOpen(true);
+      }
+    };
+
     window.addEventListener('add-to-pos-cart', handleAddToCart);
-    return () => window.removeEventListener('add-to-pos-cart', handleAddToCart);
+    window.addEventListener('open-addon-rental', handleOpenAddonRental);
+    return () => {
+      window.removeEventListener('add-to-pos-cart', handleAddToCart);
+      window.removeEventListener('open-addon-rental', handleOpenAddonRental);
+    };
   }, [packages, items, cart, selectedPackageId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredItems = items.filter(item => 
@@ -255,72 +282,25 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
       setIsSubmitting(false)
       return
     }
-    
-    if (cart.length > 0) {
-      formData.append("payload", JSON.stringify(cart.map(c => ({ id: c.id, qty: Number(c.qty) || 1 }))))
-      const result = await addBulkRental(formData)
-      
-      if (result && !result.success) {
-        setErrorMsg(result.error ?? "Terjadi kesalahan sistem.");
-        setIsSubmitting(false)
-        return
-      }
+
+    formData.append("itemsPayload", JSON.stringify(cart))
+    formData.append("customPayload", JSON.stringify(customItems))
+    formData.append("rentalDays", String(rentalDays || 1))
+    formData.append("discountPercentage", String(discountPercentage || 0))
+    formData.append("discountDesc", discountDesc || "")
+    formData.append("eventName", eventName || "")
+    if (targetEventId) {
+      formData.append("targetEventId", targetEventId)
+      formData.append("targetEventName", targetEventName)
     }
 
-    // Tambahkan pencatatan riwayat transaksi
-    const historyFormData = new FormData()
-    historyFormData.append("type", "INVOICE_RENTAL")
-    historyFormData.append("date", new Date().toISOString().split('T')[0])
+    const result = await checkoutRental(formData)
     
-    const safeDays = Number(rentalDays) || 1
-    const safeDisc = Number(discountPercentage) || 0
-    const totalQty = cart.reduce((acc: number, i: any) => acc + (Number(i.qty) || 1), 0)
-    const totalCustomQty = customItems.reduce((acc: number, i: any) => acc + (Number(i.qty) || 1), 0)
-    
-    let historyDesc = `Invoice Rental (`
-    if (totalQty > 0) historyDesc += `${totalQty} Aset`
-    if (totalQty > 0 && totalCustomQty > 0) historyDesc += `, `
-    if (totalCustomQty > 0) historyDesc += `${totalCustomQty} Layanan`
-    historyDesc += `)`
-    
-    if (eventName.trim() !== "") {
-      historyDesc = `Event: ${eventName.trim()} | ` + historyDesc
+    if (result && !result.success) {
+      setErrorMsg(result.error ?? "Terjadi kesalahan sistem.");
+      setIsSubmitting(false)
+      return
     }
-    if (safeDays > 1) {
-      historyDesc += ` - ${safeDays} Hari`
-    }
-    if (safeDisc > 0) {
-      historyDesc += ` - Diskon ${safeDisc}%`
-      if (discountDesc.trim() !== "") {
-        historyDesc += ` (${discountDesc.trim()})`
-      }
-    }
-    historyFormData.append("description", historyDesc)
-    
-    const historyPayload = [
-      ...cart.map((c: any) => ({
-        id: c.id,
-        name: c.name,
-        code: c.code,
-        qty: Number(c.qty) || 1,
-        returnedQty: 0,
-        imageUrl: c.imageUrl || null,
-        price: (((c.price || 0) * (c.rentPercentage || 0)) / 100) * safeDays * (1 - (safeDisc / 100)),
-        footnote: c.footnote || ""
-      })),
-      ...customItems.map((c: any) => ({
-        id: c.id,
-        name: c.name,
-        code: "LAYANAN",
-        qty: Number(c.qty) || 1,
-        returnedQty: 0,
-        imageUrl: null,
-        price: (Number(c.price) || 0) * safeDays * (1 - (safeDisc / 100)),
-        footnote: c.footnote || "Layanan Tambahan"
-      }))
-    ]
-    historyFormData.append("payload", JSON.stringify(historyPayload))
-    await createHistory(historyFormData)
 
     setIsSubmitting(false)
     setOpen(false)
@@ -330,6 +310,8 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
     setDiscountPercentage(0)
     setDiscountDesc("")
     setEventName("")
+    setTargetEventId("")
+    setTargetEventName("")
     setRentalDays(1)
     setCustomItems([])
     setCustomName("")
@@ -350,7 +332,7 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
   if (!isAdmin && !isDummyUser) return null;
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) { setErrorMsg(null); setWarningMsg(null); }}}>
+    <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) { setErrorMsg(null); setWarningMsg(null); setTargetEventId(""); setTargetEventName(""); }}}>
       <DialogTrigger asChild>
         <Button className="w-full sm:w-auto shrink-0 bg-emerald-600 border border-emerald-500 text-white hover:bg-emerald-500 shadow-lg hover:shadow-emerald-900/50 transition-all font-bold flex items-center justify-center gap-2">
           <ShoppingCart className="w-4 h-4" />
@@ -364,7 +346,9 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
       </DialogTrigger>
       <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-50 flex flex-col max-w-[98vw] sm:max-w-[98vw] md:max-w-[98vw] lg:max-w-[98vw] w-full h-[98vh] max-h-[98vh] overflow-hidden p-3 sm:p-6">
         <DialogHeader className="shrink-0">
-          <DialogTitle>Keranjang Rental & Point of Sale (POS)</DialogTitle>
+          <DialogTitle>
+            {targetEventId ? `Tambah Barang Susulan: ${targetEventName}` : "Keranjang Rental & Point of Sale (POS)"}
+          </DialogTitle>
         </DialogHeader>
         {errorMsg && (
           <div className="bg-red-950/50 border border-red-900 text-red-400 text-sm p-3 rounded-md flex items-center gap-2 shrink-0">
@@ -381,10 +365,48 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
 
         <form action={handleSubmit} className="flex flex-col lg:flex-row gap-6 pt-2 flex-1 overflow-y-auto pr-1 pb-4">
           <div className="flex flex-col gap-4 w-full lg:w-[350px] xl:w-[400px] shrink-0 pb-2">
+            {targetEventId && (
+              <div className="bg-emerald-950/60 border border-emerald-800 text-emerald-300 text-xs p-3 rounded-lg flex flex-col gap-1.5 shrink-0">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 font-bold text-emerald-400">
+                    <PlusCircle className="w-4 h-4" /> Mode Tambah Barang Susulan
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTargetEventId("");
+                      setTargetEventName("");
+                      setEventName("");
+                    }}
+                    className="text-[10px] text-zinc-400 hover:text-red-400 underline"
+                  >
+                    Batal Mode Susulan
+                  </button>
+                </div>
+                <p className="text-[11px] text-emerald-200/80">
+                  Barang yang disewa akan otomatis tergabung ke Event: <strong>{targetEventName}</strong> dan membuat Invoice Tambahan baru di Riwayat Transaksi.
+                </p>
+              </div>
+            )}
+
             <div className="space-y-2 shrink-0">
-            <Label>Nama Event / Acara (Opsional)</Label>
-            <Input placeholder="Misal: Konser Dewa 19" value={eventName} onChange={(e) => setEventName(e.target.value)} className="bg-zinc-900 border-zinc-800" />
-          </div>
+              <div className="flex justify-between items-center">
+                <Label>Nama Event / Acara {targetEventId ? "(Terkunci: Mode Tambahan)" : "(Opsional)"}</Label>
+                {targetEventId && (
+                  <span className="text-[10px] bg-emerald-900/60 text-emerald-300 border border-emerald-700 px-1.5 py-0.5 rounded font-mono">
+                    Mode Susulan
+                  </span>
+                )}
+              </div>
+              <Input
+                placeholder="Misal: Konser Dewa 19"
+                value={eventName}
+                onChange={(e) => !targetEventId && setEventName(e.target.value)}
+                readOnly={!!targetEventId}
+                disabled={!!targetEventId}
+                className={`bg-zinc-900 border-zinc-800 ${targetEventId ? "opacity-90 cursor-not-allowed bg-zinc-900/80 font-semibold text-emerald-300 border-emerald-800/60" : ""}`}
+              />
+            </div>
 
           {packages.length > 0 && (
             <div className="space-y-2 shrink-0 bg-zinc-900/50 p-3 rounded-lg border border-zinc-800">
