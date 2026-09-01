@@ -1,12 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { EditItemDialog } from "@/components/EditItemDialog";
 import { DeleteItemDialog } from "@/components/DeleteItemDialog";
 import { AddCategoryDialog } from "@/components/AddCategoryDialog";
 import { EditCategoryDialog } from "@/components/EditCategoryDialog"; 
 import { DeleteCategoryDialog } from "@/components/DeleteCategoryDialog";
-import { Search, ArrowUpDown, History as HistoryIcon, Calendar, Trash2, Pencil, Loader2, Printer, PackageSearch, Eye, ShoppingCart, PlusCircle, Copy, Check } from "lucide-react";
+import { Search, ArrowUpDown, History as HistoryIcon, Calendar, Trash2, Pencil, Loader2, Printer, PackageSearch, Eye, ShoppingCart, PlusCircle, Copy, Check, RefreshCw } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger, DialogHeader } from "@/components/ui/dialog";
 import { RentalInvoiceDialog } from "@/components/RentalInvoiceDialog";
@@ -14,7 +15,7 @@ import { ReturnRentalDialog } from "@/components/ReturnRentalDialog";
 import { ReprintInvoiceDialog } from "@/components/ReprintInvoiceDialog";
 import { EditPackageDialog } from "@/components/EditPackageDialog";
 import { PrintPackageDialog } from "@/components/PrintPackageDialog";
-import { updateHistory, deleteHistory, deletePackageTemplate, batchRegenerateCodes } from "@/app/actions";
+import { updateHistory, deleteHistory, deletePackageTemplate, batchRegenerateCodes, syncActiveEvents } from "@/app/actions";
 import { AddToPackageDialog } from "@/components/AddToPackageDialog";
 import { DemoRestrictionDialog } from "@/components/DemoRestrictionDialog";
 import { isAdminEmail, isDemoEmail, DEMO_MESSAGES } from "@/lib/permissions";
@@ -79,6 +80,7 @@ interface MultiLayerDashboardProps {
 }
 
 export default function MultiLayerDashboard({ items, categories, histories, packages }: MultiLayerDashboardProps) {
+  const router = useRouter();
   const [activeLayer, setActiveLayer] = useState<'home' | 'all_items' | 'rented' | 'maintenance' | 'history' | 'packages'>('home');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -101,6 +103,31 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
   const [copiedHistoryId, setCopiedHistoryId] = useState<string | null>(null);
   const [copiedEventId, setCopiedEventId] = useState<string | null>(null);
   const [copiedPackageId, setCopiedPackageId] = useState<string | null>(null);
+  
+  // State untuk Sinkronisasi Data On Rented
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncToastMsg, setSyncToastMsg] = useState(false);
+
+  // Handler Sinkronisasi Data & Pembersihan Ghost Events
+  const handleSyncData = async () => {
+    if (isDummyUser) {
+      triggerDemoWarning('edit');
+      return;
+    }
+    setIsSyncing(true);
+    try {
+      const res = await syncActiveEvents();
+      if (res && res.success) {
+        router.refresh();
+        setSyncToastMsg(true);
+        setTimeout(() => setSyncToastMsg(false), 3000);
+      }
+    } catch (err) {
+      console.error("Gagal sinkronisasi data:", err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
   
   // Handler Salin Data Invoice ke Clipboard dalam Format Markdown
   const handleCopyInvoice = async (hist: History) => {
@@ -277,13 +304,35 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
     }, { availableUnits: 0, rentedUnits: 0, maintenanceUnits: 0, totalValuation: 0 });
   }, [items]);
 
-  // --- Active Events Logic ---
+  // --- Active Events Logic (Dengan Proteksi Ghost Event) ---
   const activeEvents = useMemo(() => {
-    return histories.filter(h => 
-      h.type === 'INVOICE_RENTAL' && 
-      h.description?.includes('Event:') && 
-      !h.description?.includes('[SELESAI]')
-    );
+    return histories.filter(h => {
+      // 1. Validasi tipe dan status event
+      if (
+        h.type !== 'INVOICE_RENTAL' ||
+        !h.description?.includes('Event:') ||
+        h.description?.includes('[SELESAI]')
+      ) {
+        return false;
+      }
+
+      // 2. Proteksi UI: Cek apakah masih ada barang fisik yang belum dikembalikan (Rented > 0)
+      if (!h.payload) return false;
+      try {
+        const payload = JSON.parse(h.payload);
+        if (!Array.isArray(payload) || payload.length === 0) return false;
+
+        const activeItems = payload.filter((p: any) => {
+          const remainingQty = (Number(p.qty) || 0) - (Number(p.returnedQty) || 0);
+          const isPhysicalItem = p.code !== "LAYANAN" && !(p.id && String(p.id).startsWith("custom-"));
+          return isPhysicalItem && remainingQty > 0;
+        });
+
+        return activeItems.length > 0;
+      } catch {
+        return false;
+      }
+    });
   }, [histories]);
 
   const TABS = [
@@ -741,6 +790,15 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
               {activeLayer === 'rented' && (
                 <>
                   <div className="w-px h-4 bg-zinc-700 mx-1 hidden sm:block"></div>
+                  <button
+                    onClick={handleSyncData}
+                    disabled={isSyncing}
+                    className="flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-3 py-1.5 rounded-md text-sm font-medium transition-colors border border-zinc-700 shadow-sm whitespace-nowrap disabled:opacity-50"
+                    title="Sinkronisasi Data & Bersihkan Ghost Events"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin text-amber-400" : "text-zinc-400"}`} />
+                    <span>{isSyncing ? "Menyinkronkan..." : "Sinkronisasi Data"}</span>
+                  </button>
                   <ReturnRentalDialog items={itemsToDisplay} />
                   <RentalInvoiceDialog items={itemsToDisplay} />
                 </>
@@ -1372,6 +1430,17 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
           <button onClick={() => { setCartSuccessMsg(false); setAddedItemName(null); }} className="mt-6 w-full h-10 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 rounded-md border border-zinc-800 transition-colors font-medium">Tutup</button>
         </DialogContent>
       </Dialog>
+
+      {/* TOAST FEEDBACK SINKRONISASI */}
+      {syncToastMsg && (
+        <div className="fixed bottom-6 right-6 bg-emerald-950 border border-emerald-600 text-emerald-200 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 z-50 animate-in fade-in slide-in-from-bottom-5 duration-200">
+          <Check className="w-5 h-5 text-emerald-400 shrink-0" />
+          <div>
+            <p className="text-sm font-bold text-white">Sinkronisasi Berhasil!</p>
+            <p className="text-xs text-emerald-300">Data event dan ketersediaan barang telah diperbarui.</p>
+          </div>
+        </div>
+      )}
 
       {/* MODAL RESTRIKSI AKUN DEMO */}
       <DemoRestrictionDialog

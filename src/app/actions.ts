@@ -747,3 +747,102 @@ export async function batchRegenerateCodes() {
     return { success: false, error: "Gagal merapikan kode aset masal." };
   }
 }
+
+// --- FUNGSI SINKRONISASI DATA & BERSIHKAN GHOST EVENTS ---
+export async function syncActiveEvents() {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
+  try {
+    const activeEvents = await prisma.history.findMany({
+      where: {
+        type: "INVOICE_RENTAL",
+        description: { contains: "Event:" }
+      },
+      orderBy: { date: "asc" }
+    });
+
+    const nonCompletedEvents = activeEvents.filter(
+      e => e.description && !e.description.includes("[SELESAI]")
+    );
+
+    const items = await prisma.item.findMany();
+    const itemMap = new Map(items.map(i => [i.id, i]));
+    const itemCodeMap = new Map(items.map(i => [i.code, i]));
+
+    let updatedCount = 0;
+
+    await prisma.$transaction(async (tx) => {
+      for (const event of nonCompletedEvents) {
+        if (!event.payload) continue;
+        let eventPayload: any[] = [];
+        try {
+          eventPayload = JSON.parse(event.payload);
+        } catch {
+          continue;
+        }
+
+        if (!Array.isArray(eventPayload) || eventPayload.length === 0) {
+          await tx.history.update({
+            where: { id: event.id },
+            data: { description: `${event.description || "Event"} [SELESAI]` }
+          });
+          updatedCount++;
+          continue;
+        }
+
+        const physicalItems = eventPayload.filter(
+          (p: any) => p.code !== "LAYANAN" && !(p.id && String(p.id).startsWith("custom-"))
+        );
+
+        if (physicalItems.length === 0) {
+          await tx.history.update({
+            where: { id: event.id },
+            data: { description: `${event.description || "Event"} [SELESAI]` }
+          });
+          updatedCount++;
+          continue;
+        }
+
+        const unreturnedCount = physicalItems.reduce((acc: number, p: any) => {
+          const rem = Math.max(0, (Number(p.qty) || 0) - (Number(p.returnedQty) || 0));
+          return acc + rem;
+        }, 0);
+
+        const allItemsInDbReturned = physicalItems.every((p: any) => {
+          const dbItem = itemMap.get(p.id) || (p.code ? itemCodeMap.get(p.code) : undefined);
+          return !dbItem || dbItem.rentedQuantity === 0;
+        });
+
+        if (unreturnedCount === 0 || allItemsInDbReturned) {
+          const updatedPayload = eventPayload.map((p: any) => {
+            const isPhysical = p.code !== "LAYANAN" && !(p.id && String(p.id).startsWith("custom-"));
+            if (isPhysical) {
+              return { ...p, returnedQty: Number(p.qty) || 1 };
+            }
+            return p;
+          });
+
+          let newDesc = event.description || "Event";
+          if (!newDesc.includes("[SELESAI]")) {
+            newDesc = `${newDesc} [SELESAI]`;
+          }
+
+          await tx.history.update({
+            where: { id: event.id },
+            data: {
+              description: newDesc,
+              payload: JSON.stringify(updatedPayload)
+            }
+          });
+          updatedCount++;
+        }
+      }
+    }, { maxWait: 5000, timeout: 20000 });
+
+    revalidatePath("/");
+    return { success: true, count: updatedCount };
+  } catch (error: any) {
+    console.error("syncActiveEvents error:", error);
+    return { success: false, error: error.message || "Gagal melakukan sinkronisasi data event." };
+  }
+}
