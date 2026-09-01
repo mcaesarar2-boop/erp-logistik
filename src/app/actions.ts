@@ -395,6 +395,7 @@ export async function returnBulkRental(formData: FormData) {
     if (payload.length === 0) return { success: true };
     
     await prisma.$transaction(async (tx) => {
+      // 1. Validasi & Update Item Stok Gudang vs Rented
       const itemIds = payload.map(item => item.id);
       const dbItems = await tx.item.findMany({
         where: { id: { in: itemIds } }
@@ -407,33 +408,131 @@ export async function returnBulkRental(formData: FormData) {
         if (dbItem.rentedQuantity < item.qty) throw new Error(`Jumlah pengembalian untuk ${dbItem.name} melebihi yang sedang disewa.`);
       }
 
-      const updateOperations = payload.map(item => {
-        const dbItem = dbItemMap.get(item.id)!;
-        return tx.item.update({
-          where: { id: item.id },
-          data: {
-            quantity: dbItem.quantity + item.qty,
-            rentedQuantity: dbItem.rentedQuantity - item.qty
-          }
-        });
-      });
+      // Update stok item di database
+      await Promise.all(
+        payload.map(item => {
+          const dbItem = dbItemMap.get(item.id)!;
+          return tx.item.update({
+            where: { id: item.id },
+            data: {
+              quantity: dbItem.quantity + item.qty,
+              rentedQuantity: Math.max(0, dbItem.rentedQuantity - item.qty)
+            }
+          });
+        })
+      );
 
-      // Jika pengembalian ini terkait dengan Event (History), perbarui status qty event tersebut
+      // 2. Jika pengembalian ditargetkan ke Event Tertentu (dari Tombol di Card)
       if (historyId) {
+        let updatedPayloadStr = historyPayloadStr;
+        let updatedDesc = historyDesc;
+
+        // Jika client tidak mengirimkan payload ter-update atau deskripsi, hitung di backend
+        if (!updatedPayloadStr) {
+          const event = await tx.history.findUnique({ where: { id: historyId } });
+          if (event && event.payload) {
+            const eventPayload = JSON.parse(event.payload || "[]");
+            const newPayload = eventPayload.map((p: any) => {
+              const returnedItem = payload.find(c => c.id === p.id || (p.code && dbItemMap.get(c.id)?.code === p.code));
+              if (returnedItem) {
+                const newReturnedQty = Math.min(p.qty, (p.returnedQty || 0) + returnedItem.qty);
+                return { ...p, returnedQty: newReturnedQty };
+              }
+              return p;
+            });
+            updatedPayloadStr = JSON.stringify(newPayload);
+
+            const isAllReturned = newPayload
+              .filter((p: any) => p.code !== "LAYANAN" && !(p.id && String(p.id).startsWith("custom-")))
+              .every((p: any) => (p.returnedQty || 0) >= p.qty);
+
+            if (isAllReturned && event.description && !event.description.includes("[SELESAI]")) {
+              updatedDesc = `${event.description} [SELESAI]`;
+            }
+          }
+        }
+
         const updateData: any = {};
-        if (historyPayloadStr) updateData.payload = historyPayloadStr;
-        if (historyDesc) updateData.description = historyDesc;
+        if (updatedPayloadStr) updateData.payload = updatedPayloadStr;
+        if (updatedDesc) updateData.description = updatedDesc;
         if (Object.keys(updateData).length > 0) {
-          updateOperations.push(
-            tx.history.update({
-              where: { id: historyId },
-              data: updateData
-            }) as any
-          );
+          await tx.history.update({
+            where: { id: historyId },
+            data: updateData
+          });
+        }
+      } else {
+        // 3. Jika pengembalian GLOBAL (dari Tombol Utama di Atas)
+        // Cari semua event aktif yang belum SELESAI
+        const activeEvents = await tx.history.findMany({
+          where: {
+            type: "INVOICE_RENTAL",
+            description: { contains: "Event:" }
+          },
+          orderBy: { date: "asc" }
+        });
+
+        const nonCompletedEvents = activeEvents.filter(
+          e => e.description && !e.description.includes("[SELESAI]")
+        );
+
+        // Tracking sisa kuantitas barang yang dikembalikan untuk didistribusikan ke event-event terkait (FIFO)
+        const returnPool = new Map<string, number>();
+        for (const item of payload) {
+          returnPool.set(item.id, item.qty);
+        }
+
+        for (const event of nonCompletedEvents) {
+          if (!event.payload) continue;
+          let eventPayload: any[] = [];
+          try {
+            eventPayload = JSON.parse(event.payload);
+          } catch {
+            continue;
+          }
+
+          let eventModified = false;
+
+          const updatedEventPayload = eventPayload.map((p: any) => {
+            const dbItem = payload.find(c => c.id === p.id || (p.code && dbItemMap.get(c.id)?.code === p.code));
+            if (!dbItem) return p;
+
+            const remainingInPool = returnPool.get(dbItem.id) || 0;
+            if (remainingInPool <= 0) return p;
+
+            const unreturnedInEvent = Math.max(0, p.qty - (p.returnedQty || 0));
+            if (unreturnedInEvent <= 0) return p;
+
+            const qtyToDeduct = Math.min(remainingInPool, unreturnedInEvent);
+            returnPool.set(dbItem.id, remainingInPool - qtyToDeduct);
+            eventModified = true;
+
+            return {
+              ...p,
+              returnedQty: (p.returnedQty || 0) + qtyToDeduct
+            };
+          });
+
+          if (eventModified) {
+            const isAllReturned = updatedEventPayload
+              .filter((p: any) => p.code !== "LAYANAN" && !(p.id && String(p.id).startsWith("custom-")))
+              .every((p: any) => (p.returnedQty || 0) >= p.qty);
+
+            let newDesc = event.description || "";
+            if (isAllReturned && !newDesc.includes("[SELESAI]")) {
+              newDesc = `${newDesc} [SELESAI]`;
+            }
+
+            await tx.history.update({
+              where: { id: event.id },
+              data: {
+                payload: JSON.stringify(updatedEventPayload),
+                description: newDesc
+              }
+            });
+          }
         }
       }
-
-      await Promise.all(updateOperations);
     }, { maxWait: 5000, timeout: 20000 });
 
     revalidatePath("/");

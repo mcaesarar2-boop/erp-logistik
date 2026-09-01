@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -25,6 +26,7 @@ interface ReturnRentalDialogProps {
 }
 
 export function ReturnRentalDialog({ items, activeEvent }: ReturnRentalDialogProps) {
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   
@@ -156,6 +158,7 @@ export function ReturnRentalDialog({ items, activeEvent }: ReturnRentalDialogPro
     }
     setOpen(false)
     setCart([]) // Reset state
+    router.refresh()
   }
 
   if (!isAdmin && !isDummyUser) return null;
