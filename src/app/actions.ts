@@ -341,23 +341,40 @@ export async function addBulkRental(formData: FormData) {
     if (!payloadStr) return { success: false, error: "Data kosong." };
     
     const payload = JSON.parse(payloadStr) as { id: string; qty: number }[];
+    if (payload.length === 0) return { success: true };
     
-    // Gunakan transaksi (transaction) agar database update sekaligus
+    // Gunakan transaksi (transaction) dengan timeout diperbesar dan eksekusi paralel
     await prisma.$transaction(async (tx) => {
+      const itemIds = payload.map(item => item.id);
+      const dbItems = await tx.item.findMany({
+        where: { id: { in: itemIds } }
+      });
+      const dbItemMap = new Map(dbItems.map(i => [i.id, i]));
+
       for (const item of payload) {
-        const dbItem = await tx.item.findUnique({ where: { id: item.id } });
+        const dbItem = dbItemMap.get(item.id);
         if (!dbItem) throw new Error(`Barang dengan ID ${item.id} tidak ditemukan.`);
-        if (dbItem.quantity < item.qty) throw new Error(`Stok tersedia untuk ${dbItem.name} tidak mencukupi.`);
-        
-        await tx.item.update({
-          where: { id: item.id },
-          data: { quantity: dbItem.quantity - item.qty, rentedQuantity: dbItem.rentedQuantity + item.qty }
-        });
+        if (dbItem.quantity < item.qty) throw new Error(`Stok tersedia untuk ${dbItem.name} tidak mencukupi (Tersedia: ${dbItem.quantity}, Diminta: ${item.qty}).`);
       }
-    });
+
+      await Promise.all(
+        payload.map(item => {
+          const dbItem = dbItemMap.get(item.id)!;
+          return tx.item.update({
+            where: { id: item.id },
+            data: {
+              quantity: dbItem.quantity - item.qty,
+              rentedQuantity: dbItem.rentedQuantity + item.qty
+            }
+          });
+        })
+      );
+    }, { maxWait: 5000, timeout: 20000 });
+
     revalidatePath("/");
     return { success: true };
   } catch (error: any) {
+    console.error("addBulkRental error:", error);
     return { success: false, error: error.message || "Gagal memproses rental masal." };
   }
 }
@@ -375,18 +392,31 @@ export async function returnBulkRental(formData: FormData) {
     if (!payloadStr) return { success: false, error: "Data kosong." };
     
     const payload = JSON.parse(payloadStr) as { id: string; qty: number }[];
+    if (payload.length === 0) return { success: true };
     
     await prisma.$transaction(async (tx) => {
+      const itemIds = payload.map(item => item.id);
+      const dbItems = await tx.item.findMany({
+        where: { id: { in: itemIds } }
+      });
+      const dbItemMap = new Map(dbItems.map(i => [i.id, i]));
+
       for (const item of payload) {
-        const dbItem = await tx.item.findUnique({ where: { id: item.id } });
+        const dbItem = dbItemMap.get(item.id);
         if (!dbItem) throw new Error(`Barang dengan ID ${item.id} tidak ditemukan.`);
         if (dbItem.rentedQuantity < item.qty) throw new Error(`Jumlah pengembalian untuk ${dbItem.name} melebihi yang sedang disewa.`);
-        
-        await tx.item.update({
-          where: { id: item.id },
-          data: { quantity: dbItem.quantity + item.qty, rentedQuantity: dbItem.rentedQuantity - item.qty }
-        });
       }
+
+      const updateOperations = payload.map(item => {
+        const dbItem = dbItemMap.get(item.id)!;
+        return tx.item.update({
+          where: { id: item.id },
+          data: {
+            quantity: dbItem.quantity + item.qty,
+            rentedQuantity: dbItem.rentedQuantity - item.qty
+          }
+        });
+      });
 
       // Jika pengembalian ini terkait dengan Event (History), perbarui status qty event tersebut
       if (historyId) {
@@ -394,16 +424,22 @@ export async function returnBulkRental(formData: FormData) {
         if (historyPayloadStr) updateData.payload = historyPayloadStr;
         if (historyDesc) updateData.description = historyDesc;
         if (Object.keys(updateData).length > 0) {
-          await tx.history.update({
-            where: { id: historyId },
-            data: updateData
-          });
+          updateOperations.push(
+            tx.history.update({
+              where: { id: historyId },
+              data: updateData
+            }) as any
+          );
         }
       }
-    });
+
+      await Promise.all(updateOperations);
+    }, { maxWait: 5000, timeout: 20000 });
+
     revalidatePath("/");
     return { success: true };
   } catch (error: any) {
+    console.error("returnBulkRental error:", error);
     return { success: false, error: error.message || "Gagal memproses pengembalian barang." };
   }
 }
@@ -417,21 +453,39 @@ export async function addBulkMaintenance(formData: FormData) {
     if (!payloadStr) return { success: false, error: "Data kosong." };
     
     const payload = JSON.parse(payloadStr) as { id: string; qty: number }[];
+    if (payload.length === 0) return { success: true };
+
     await prisma.$transaction(async (tx) => {
+      const itemIds = payload.map(item => item.id);
+      const dbItems = await tx.item.findMany({
+        where: { id: { in: itemIds } }
+      });
+      const dbItemMap = new Map(dbItems.map(i => [i.id, i]));
+
       for (const item of payload) {
-        const dbItem = await tx.item.findUnique({ where: { id: item.id } });
+        const dbItem = dbItemMap.get(item.id);
         if (!dbItem) throw new Error(`Barang dengan ID ${item.id} tidak ditemukan.`);
         if (dbItem.quantity < item.qty) throw new Error(`Stok tersedia untuk ${dbItem.name} tidak mencukupi.`);
-        
-        await tx.item.update({
-          where: { id: item.id },
-          data: { quantity: dbItem.quantity - item.qty, maintenanceQuantity: dbItem.maintenanceQuantity + item.qty }
-        });
       }
-    });
+
+      await Promise.all(
+        payload.map(item => {
+          const dbItem = dbItemMap.get(item.id)!;
+          return tx.item.update({
+            where: { id: item.id },
+            data: {
+              quantity: dbItem.quantity - item.qty,
+              maintenanceQuantity: dbItem.maintenanceQuantity + item.qty
+            }
+          });
+        })
+      );
+    }, { maxWait: 5000, timeout: 20000 });
+
     revalidatePath("/");
     return { success: true };
   } catch (error: any) {
+    console.error("addBulkMaintenance error:", error);
     return { success: false, error: error.message || "Gagal memproses pemeliharaan masal." };
   }
 }
@@ -554,38 +608,41 @@ export async function batchRegenerateCodes() {
     });
 
     // 1. Ubah semua kode menjadi "sementara" untuk menghindari bentrok / konflik duplikasi di Database
-    const tempUpdates = items.map(item => 
-      prisma.item.update({
-        where: { id: item.id },
-        data: { code: `TEMP-${item.id}` }
-      })
-    );
-    await prisma.$transaction(tempUpdates);
+    await prisma.$transaction(async (tx) => {
+      await Promise.all(
+        items.map(item =>
+          tx.item.update({
+            where: { id: item.id },
+            data: { code: `TEMP-${item.id}` }
+          })
+        )
+      );
 
-    // 2. Buat dan terapkan kode baru dengan format otomatis
-    const prefixCounters: Record<string, number> = {};
-    const finalUpdates = [];
+      // 2. Buat dan terapkan kode baru dengan format otomatis
+      const prefixCounters: Record<string, number> = {};
+      const updates = [];
 
-    for (const item of items) {
-      let prefix = "ITM";
-      if (item.categories.length > 0) {
-        const prefixes = item.categories.map(c => generatePrefix(c.name)).sort();
-        prefix = prefixes.join('-');
+      for (const item of items) {
+        let prefix = "ITM";
+        if (item.categories.length > 0) {
+          const prefixes = item.categories.map(c => generatePrefix(c.name)).sort();
+          prefix = prefixes.join('-');
+        }
+
+        if (!prefixCounters[prefix]) prefixCounters[prefix] = 1;
+        else prefixCounters[prefix]++;
+
+        const newSerial = prefixCounters[prefix];
+        const newCode = `${prefix}-${newSerial.toString().padStart(3, '0')}`;
+
+        updates.push(tx.item.update({ where: { id: item.id }, data: { code: newCode } }));
       }
 
-      if (!prefixCounters[prefix]) prefixCounters[prefix] = 1;
-      else prefixCounters[prefix]++;
+      await Promise.all(updates);
+    }, { maxWait: 5000, timeout: 30000 });
 
-      const newSerial = prefixCounters[prefix];
-      const newCode = `${prefix}-${newSerial.toString().padStart(3, '0')}`;
-
-      finalUpdates.push(prisma.item.update({ where: { id: item.id }, data: { code: newCode } }));
-    }
-
-    // Simpan semua kode baru
-    await prisma.$transaction(finalUpdates);
     revalidatePath("/");
-    return { success: true, count: finalUpdates.length };
+    return { success: true, count: items.length };
   } catch (error: any) {
     console.error("Batch Update Error:", error);
     return { success: false, error: "Gagal merapikan kode aset masal." };
