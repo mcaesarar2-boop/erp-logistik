@@ -696,7 +696,7 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                       <h4 className="font-bold text-amber-400 mb-1 line-clamp-1" title={event.description || ""}>{event.description?.split('|')[0].replace('Event:', '').trim()}</h4>
                       <p className="text-xs text-zinc-500 mb-4">{new Date(event.date).toLocaleDateString('id-ID', { dateStyle: 'full' })}</p>
                       
-                      <div className="flex-1 bg-zinc-950/50 rounded-lg p-2.5 border border-zinc-800/50 mb-4 max-h-40 overflow-y-auto space-y-3">
+                      <div className="flex-1 mb-4 space-y-3">
                         {groupItemsByPrimaryCategory(activeItems, items).map(group => (
                           <div key={group.categoryName} className="w-full">
                             <div className="w-full flex items-center gap-1.5 pb-1 mb-1.5 border-b border-zinc-800/80">

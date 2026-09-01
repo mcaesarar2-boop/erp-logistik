@@ -375,8 +375,8 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
           </div>
         )}
 
-        <form action={handleSubmit} className="flex flex-col lg:flex-row gap-4 pt-2 flex-1 lg:min-h-0 overflow-y-auto lg:overflow-hidden">
-          <div className="flex flex-col gap-4 w-full lg:w-[350px] xl:w-[400px] shrink-0 lg:overflow-y-auto pr-1 pb-2">
+        <form action={handleSubmit} className="flex flex-col lg:flex-row gap-6 pt-2 flex-1 overflow-y-auto pr-1 pb-4">
+          <div className="flex flex-col gap-4 w-full lg:w-[350px] xl:w-[400px] shrink-0 pb-2">
             <div className="space-y-2 shrink-0">
             <Label>Nama Event / Acara (Opsional)</Label>
             <Input placeholder="Misal: Konser Dewa 19" value={eventName} onChange={(e) => setEventName(e.target.value)} className="bg-zinc-900 border-zinc-800" />
@@ -453,9 +453,9 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
           </div>
           </div>
 
-          <div className="flex flex-col gap-2 flex-1 min-h-0 bg-zinc-900/30 p-3 sm:p-4 rounded-xl border border-zinc-800">
+          <div className="flex flex-col gap-3 flex-1 min-w-0">
             <div className="flex justify-between items-center shrink-0 border-b border-zinc-800 pb-2">
-              <Label className="text-base text-zinc-100">Daftar Keranjang / Invoice</Label>
+              <Label className="text-base text-zinc-100 font-bold">Daftar Keranjang / Invoice</Label>
               {(cart.length > 0 || customItems.length > 0) && (
                 <button 
                   type="button" 
@@ -479,7 +479,7 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
             {cart.length === 0 && customItems.length === 0 ? (
               <div className="flex-1 flex items-center justify-center p-6 border border-dashed border-zinc-800 rounded-lg text-center text-zinc-500 text-sm mt-2">Belum ada item di keranjang.</div>
             ) : (
-              <div className="space-y-4 overflow-y-auto overflow-x-hidden pr-2 flex-1 min-h-[200px] lg:min-h-0 mt-2">
+              <div className="space-y-4 mt-2">
                 {groupedCart.map(group => (
                   <div key={group.categoryName} className="w-full">
                     {/* Section Header Kategori Utama */}
