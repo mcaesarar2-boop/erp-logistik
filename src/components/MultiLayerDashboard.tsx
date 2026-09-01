@@ -19,7 +19,7 @@ import { AddToPackageDialog } from "@/components/AddToPackageDialog";
 import { DemoRestrictionDialog } from "@/components/DemoRestrictionDialog";
 import { isAdminEmail, isDemoEmail, DEMO_MESSAGES } from "@/lib/permissions";
 import { ItemThumbnail } from "@/components/ItemThumbnail";
-import { groupItemsByPrimaryCategory, generateMarkdownInvoice } from "@/lib/grouping";
+import { groupItemsByPrimaryCategory, generateMarkdownInvoice, generateMarkdownEvent, generateMarkdownPackage } from "@/lib/grouping";
 import Barcode from "react-barcode";
 
 // --- KOMPONEN VISUAL BARCODE SEDERHANA ---
@@ -99,6 +99,8 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
   const [cartSuccessMsg, setCartSuccessMsg] = useState(false);
   const [addedItemName, setAddedItemName] = useState<string | null>(null);
   const [copiedHistoryId, setCopiedHistoryId] = useState<string | null>(null);
+  const [copiedEventId, setCopiedEventId] = useState<string | null>(null);
+  const [copiedPackageId, setCopiedPackageId] = useState<string | null>(null);
   
   // Handler Salin Data Invoice ke Clipboard dalam Format Markdown
   const handleCopyInvoice = async (hist: History) => {
@@ -111,6 +113,34 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
       }, 2000);
     } catch (err) {
       console.error("Gagal menyalin invoice ke clipboard", err);
+    }
+  };
+
+  // Handler Salin Data Event On Rented ke Clipboard dalam Format Markdown
+  const handleCopyEvent = async (event: History) => {
+    try {
+      const text = generateMarkdownEvent(event, items);
+      await navigator.clipboard.writeText(text);
+      setCopiedEventId(event.id);
+      setTimeout(() => {
+        setCopiedEventId(prev => (prev === event.id ? null : prev));
+      }, 2000);
+    } catch (err) {
+      console.error("Gagal menyalin event ke clipboard", err);
+    }
+  };
+
+  // Handler Salin Data Template Paket ke Clipboard dalam Format Markdown
+  const handleCopyPackage = async (pkg: PackageTemplate) => {
+    try {
+      const text = generateMarkdownPackage(pkg, items);
+      await navigator.clipboard.writeText(text);
+      setCopiedPackageId(pkg.id);
+      setTimeout(() => {
+        setCopiedPackageId(prev => (prev === pkg.id ? null : prev));
+      }, 2000);
+    } catch (err) {
+      console.error("Gagal menyalin paket ke clipboard", err);
     }
   };
 
@@ -588,6 +618,24 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                         <span className="text-lg font-bold text-emerald-400 leading-none">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(totalPackageRent)}</span>
                       </div>
                       <div className="flex items-center gap-2">
+                        <div className="relative">
+                          <button
+                            onClick={() => handleCopyPackage(pkg)}
+                            className={`p-2 rounded-md transition-all shadow-sm ${
+                              copiedPackageId === pkg.id
+                                ? "bg-blue-950/80 border border-blue-700 text-blue-400"
+                                : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
+                            }`}
+                            title="Salin Data Paket (Markdown)"
+                          >
+                            {copiedPackageId === pkg.id ? <Check className="w-4 h-4 text-blue-400" /> : <Copy className="w-4 h-4" />}
+                          </button>
+                          {copiedPackageId === pkg.id && (
+                            <div className="absolute -bottom-8 right-0 bg-blue-600 text-white text-[11px] font-semibold px-2 py-0.5 rounded shadow-lg whitespace-nowrap z-30 animate-in fade-in zoom-in-95 duration-150">
+                              Tersalin!
+                            </div>
+                          )}
+                        </div>
                         <PrintPackageDialog pkg={pkg} items={items} />
                         <button
                           onClick={() => setAddingToCartPkg(pkg)}
@@ -730,8 +778,30 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
 
                   return (
                     <div key={event.id} className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-5 flex flex-col shadow-sm group relative">
-                      <h4 className="font-bold text-amber-400 mb-1 line-clamp-1" title={event.description || ""}>{event.description?.split('|')[0].replace('Event:', '').trim()}</h4>
-                      <p className="text-xs text-zinc-500 mb-4">{new Date(event.date).toLocaleDateString('id-ID', { dateStyle: 'full' })}</p>
+                      <div className="flex justify-between items-start gap-2 mb-4">
+                        <div className="min-w-0 flex-1">
+                          <h4 className="font-bold text-amber-400 mb-1 line-clamp-1" title={event.description || ""}>{event.description?.split('|')[0].replace('Event:', '').trim()}</h4>
+                          <p className="text-xs text-zinc-500">{new Date(event.date).toLocaleDateString('id-ID', { dateStyle: 'full' })}</p>
+                        </div>
+                        <div className="relative shrink-0">
+                          <button
+                            onClick={() => handleCopyEvent(event)}
+                            className={`p-2 rounded-md transition-all shadow-sm ${
+                              copiedEventId === event.id
+                                ? "bg-amber-950/80 border border-amber-700 text-amber-400"
+                                : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
+                            }`}
+                            title="Salin Data Event (Markdown)"
+                          >
+                            {copiedEventId === event.id ? <Check className="w-4 h-4 text-amber-400" /> : <Copy className="w-4 h-4" />}
+                          </button>
+                          {copiedEventId === event.id && (
+                            <div className="absolute -bottom-8 right-0 bg-amber-600 text-white text-[11px] font-semibold px-2 py-0.5 rounded shadow-lg whitespace-nowrap z-30 animate-in fade-in zoom-in-95 duration-150">
+                              Tersalin!
+                            </div>
+                          )}
+                        </div>
+                      </div>
                       
                       <div className="flex-1 mb-4 space-y-3">
                         {groupItemsByPrimaryCategory(activeItems, items).map(group => (
@@ -750,6 +820,7 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                               {group.items.map((p: any, idx: number) => {
                                 const realItem = items.find(i => i.id === p.id || i.code === p.code);
                                 const isCustom = p.code === "LAYANAN" || (p.id && String(p.id).startsWith("custom-"));
+                                const itemNote = p.catatan || p.footnote;
                                 return (
                                   <div key={idx} className="flex justify-between items-center text-xs py-1 border-b border-zinc-850/40 last:border-0 gap-2">
                                     <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -765,7 +836,14 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                                           iconClassName="w-3.5 h-3.5 text-zinc-500"
                                         />
                                       )}
-                                      <span className="text-zinc-300 truncate font-medium">{p.name}</span>
+                                      <div className="flex flex-col min-w-0 flex-1">
+                                        <span className="text-zinc-300 truncate font-medium">{p.name}</span>
+                                        {itemNote && (
+                                          <span className="text-[11px] text-zinc-400 italic truncate" title={itemNote}>
+                                            {itemNote}
+                                          </span>
+                                        )}
+                                      </div>
                                     </div>
                                     <span className="text-amber-400 font-bold shrink-0 bg-amber-950/40 border border-amber-900/40 px-2 py-0.5 rounded text-[11px]">
                                       {p.qty - (p.returnedQty || 0)} Unit
@@ -809,6 +887,7 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                                      {group.items.map((pItem: any, idx: number) => {
                                         const realItem = items.find(i => i.id === pItem.id || i.code === pItem.code);
                                         const isCustom = pItem.code === "LAYANAN" || (pItem.id && String(pItem.id).startsWith("custom-"));
+                                        const modalItemNote = pItem.catatan || pItem.footnote;
                                         return (
                                            <div key={idx} className="flex gap-3 sm:gap-4 p-2.5 sm:p-3 bg-zinc-900/50 border border-zinc-800 rounded-lg items-center">
                                               {isCustom ? (
@@ -826,7 +905,7 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                                               <div className="flex-1 min-w-0 flex flex-col justify-center">
                                                  <h5 className="font-bold text-sm text-zinc-100 truncate">{pItem.name}</h5>
                                                  <p className="text-xs text-zinc-500 font-mono">{pItem.code}</p>
-                                                 {pItem.footnote && <p className="text-[10px] text-zinc-400 italic mt-0.5 truncate" title={pItem.footnote}>{pItem.footnote}</p>}
+                                                 {modalItemNote && <p className="text-[10px] text-zinc-400 italic mt-0.5 truncate" title={modalItemNote}>{modalItemNote}</p>}
                                                  {(pItem.returnedQty > 0) && (
                                                     <p className="text-[10px] font-bold text-amber-500 mt-1 bg-amber-950/30 w-max px-1.5 py-0.5 rounded">Kembali: {pItem.returnedQty} / {pItem.qty}</p>
                                                  )}

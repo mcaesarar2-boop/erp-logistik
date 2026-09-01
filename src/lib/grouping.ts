@@ -162,7 +162,9 @@ export function generateMarkdownInvoice(invoiceData: any, allItemsLookup?: any[]
       const qty = Number(item.qty) || 1;
       const price = Number(item.price) || 0;
       const totalItemPrice = qty * price;
-      lines.push(`- ${qty} Unit x ${item.name} (${formatRupiah(totalItemPrice)})`);
+      const itemNote = (item as any).catatan || (item as any).footnote;
+      const noteStr = itemNote && String(itemNote).trim() ? ` *(Catatan: ${String(itemNote).trim()})*` : "";
+      lines.push(`- ${qty} Unit x ${item.name}${noteStr} (${formatRupiah(totalItemPrice)})`);
     }
     lines.push("");
   }
@@ -176,4 +178,132 @@ export function generateMarkdownInvoice(invoiceData: any, allItemsLookup?: any[]
 
   return lines.join("\n").trim();
 }
+
+/**
+ * Mengubah data event aktif di tab On Rented menjadi format teks Markdown yang rapi untuk disalin ke clipboard.
+ */
+export function generateMarkdownEvent(eventData: any, allItemsLookup?: any[]): string {
+  if (!eventData) return "";
+
+  const dateFormatted = eventData.date
+    ? new Date(eventData.date).toLocaleDateString('id-ID', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      })
+    : new Date().toLocaleDateString('id-ID', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      });
+
+  let desc = eventData.description?.trim() || "Event Aktif";
+  if (desc.includes("|")) {
+    desc = desc.split("|")[0].trim();
+  }
+  if (
+    !desc.toLowerCase().startsWith("event") &&
+    !desc.toLowerCase().startsWith("cetak") &&
+    !desc.toLowerCase().startsWith("sewa")
+  ) {
+    desc = `Event: ${desc}`;
+  }
+
+  const payloadData: any[] = typeof eventData.payload === "string"
+    ? JSON.parse(eventData.payload || "[]")
+    : (Array.isArray(eventData.payload) ? eventData.payload : []);
+
+  // Saring item yang belum dikembalikan dan bukan layanan
+  const activeItems = payloadData.filter((p: any) => 
+    (p.qty - (p.returnedQty || 0)) > 0 && 
+    p.code !== "LAYANAN" && 
+    !(p.id && String(p.id).startsWith("custom-"))
+  );
+
+  const grouped = groupItemsByPrimaryCategory(activeItems, allItemsLookup);
+
+  const lines: string[] = [
+    `📅 **${dateFormatted}**`,
+    `📝 **${desc}**`,
+    "",
+  ];
+
+  for (const group of grouped) {
+    lines.push(`**[${group.categoryName}]**`);
+    for (const item of group.items) {
+      const remainingQty = (Number((item as any).qty) || 1) - (Number((item as any).returnedQty) || 0);
+      const itemNote = (item as any).catatan || (item as any).footnote;
+      const noteStr = itemNote && String(itemNote).trim() ? ` *(Catatan: ${String(itemNote).trim()})*` : "";
+      lines.push(`- ${remainingQty} Unit x ${(item as any).name}${noteStr}`);
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n").trim();
+}
+
+/**
+ * Mengubah data template paket rental menjadi format teks Markdown yang rapi untuk disalin ke clipboard.
+ */
+export function generateMarkdownPackage(pkgData: any, allItemsLookup?: any[]): string {
+  if (!pkgData) return "";
+
+  const formatRupiah = (amount: number) =>
+    new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      maximumFractionDigits: 0,
+    }).format(amount);
+
+  const payloadData: any[] = typeof pkgData.payload === "string"
+    ? JSON.parse(pkgData.payload || "[]")
+    : (Array.isArray(pkgData.payload) ? pkgData.payload : []);
+
+  const totalPackageRent = payloadData.reduce((acc: number, pItem: any) => {
+    const itemDetail = allItemsLookup?.find((i: any) => i.id === pItem.id);
+    const price = itemDetail ? itemDetail.price : pItem.price;
+    const rentPercentage = itemDetail ? itemDetail.rentPercentage : pItem.rentPercentage;
+    const rentPrice = ((price || 0) * (rentPercentage || 0)) / 100;
+    return acc + (rentPrice * (Number(pItem.qty) || 1));
+  }, 0);
+
+  const packageItems = payloadData.map((pItem: any) => {
+    const itemDetail = allItemsLookup?.find((i: any) => i.id === pItem.id);
+    return {
+      ...(itemDetail || {}),
+      ...pItem,
+      name: pItem.name || itemDetail?.name || "Aset",
+    };
+  });
+
+  const grouped = groupItemsByPrimaryCategory(packageItems, allItemsLookup);
+
+  const lines: string[] = [
+    `📦 **${pkgData.name}**`,
+  ];
+
+  if (pkgData.description && String(pkgData.description).trim()) {
+    lines.push(`_${String(pkgData.description).trim()}_`);
+  }
+
+  lines.push("");
+
+  for (const group of grouped) {
+    lines.push(`**[${group.categoryName}]**`);
+    for (const item of group.items) {
+      const qty = Number((item as any).qty) || 1;
+      const itemNote = (item as any).catatan || (item as any).footnote;
+      const noteStr = itemNote && String(itemNote).trim() ? ` *(Catatan: ${String(itemNote).trim()})*` : "";
+      lines.push(`- ${qty} Unit x ${(item as any).name}${noteStr}`);
+    }
+    lines.push("");
+  }
+
+  lines.push(`💰 **Total Harga: ${formatRupiah(totalPackageRent)}**`);
+
+  return lines.join("\n").trim();
+}
+
 
