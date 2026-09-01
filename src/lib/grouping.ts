@@ -108,3 +108,72 @@ export function groupItemsByPrimaryCategory<T>(
   return result;
 }
 
+/**
+ * Mengubah data catatan invoice / history menjadi format teks Markdown yang rapi untuk disalin ke clipboard.
+ */
+export function generateMarkdownInvoice(invoiceData: any, allItemsLookup?: any[]): string {
+  if (!invoiceData) return "";
+
+  const dateFormatted = invoiceData.date
+    ? new Date(invoiceData.date).toLocaleDateString('id-ID', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      })
+    : new Date().toLocaleDateString('id-ID', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      });
+
+  let desc = invoiceData.description?.trim() || "Invoice Rental";
+  if (
+    !desc.toLowerCase().startsWith("event") &&
+    !desc.toLowerCase().startsWith("cetak") &&
+    !desc.toLowerCase().startsWith("sewa")
+  ) {
+    desc = `Event: ${desc}`;
+  }
+
+  const payloadData: any[] = typeof invoiceData.payload === "string"
+    ? JSON.parse(invoiceData.payload || "[]")
+    : (Array.isArray(invoiceData.payload) ? invoiceData.payload : []);
+
+  const grouped = groupItemsByPrimaryCategory(payloadData, allItemsLookup);
+
+  const formatRupiah = (amount: number) =>
+    new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      maximumFractionDigits: 0,
+    }).format(amount);
+
+  const lines: string[] = [
+    `📅 **${dateFormatted}**`,
+    `📝 **${desc}**`,
+    "",
+  ];
+
+  for (const group of grouped) {
+    lines.push(`**[${group.categoryName}]**`);
+    for (const item of group.items) {
+      const qty = Number(item.qty) || 1;
+      const price = Number(item.price) || 0;
+      const totalItemPrice = qty * price;
+      lines.push(`- ${qty} Unit x ${item.name} (${formatRupiah(totalItemPrice)})`);
+    }
+    lines.push("");
+  }
+
+  const grandTotal = payloadData.reduce(
+    (acc: number, cur: any) => acc + ((Number(cur.qty) || 1) * (Number(cur.price) || 0)),
+    0
+  );
+
+  lines.push(`💰 **Total: ${formatRupiah(grandTotal)}**`);
+
+  return lines.join("\n").trim();
+}
+

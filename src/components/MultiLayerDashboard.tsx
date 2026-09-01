@@ -6,7 +6,7 @@ import { DeleteItemDialog } from "@/components/DeleteItemDialog";
 import { AddCategoryDialog } from "@/components/AddCategoryDialog";
 import { EditCategoryDialog } from "@/components/EditCategoryDialog"; 
 import { DeleteCategoryDialog } from "@/components/DeleteCategoryDialog";
-import { Search, ArrowUpDown, History as HistoryIcon, Calendar, Trash2, Pencil, Loader2, Printer, PackageSearch, Eye, ShoppingCart, PlusCircle } from "lucide-react";
+import { Search, ArrowUpDown, History as HistoryIcon, Calendar, Trash2, Pencil, Loader2, Printer, PackageSearch, Eye, ShoppingCart, PlusCircle, Copy, Check } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger, DialogHeader } from "@/components/ui/dialog";
 import { RentalInvoiceDialog } from "@/components/RentalInvoiceDialog";
@@ -19,7 +19,7 @@ import { AddToPackageDialog } from "@/components/AddToPackageDialog";
 import { DemoRestrictionDialog } from "@/components/DemoRestrictionDialog";
 import { isAdminEmail, isDemoEmail, DEMO_MESSAGES } from "@/lib/permissions";
 import { ItemThumbnail } from "@/components/ItemThumbnail";
-import { groupItemsByPrimaryCategory } from "@/lib/grouping";
+import { groupItemsByPrimaryCategory, generateMarkdownInvoice } from "@/lib/grouping";
 import Barcode from "react-barcode";
 
 // --- KOMPONEN VISUAL BARCODE SEDERHANA ---
@@ -98,7 +98,22 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
   const [addingToCartPkg, setAddingToCartPkg] = useState<PackageTemplate | null>(null);
   const [cartSuccessMsg, setCartSuccessMsg] = useState(false);
   const [addedItemName, setAddedItemName] = useState<string | null>(null);
+  const [copiedHistoryId, setCopiedHistoryId] = useState<string | null>(null);
   
+  // Handler Salin Data Invoice ke Clipboard dalam Format Markdown
+  const handleCopyInvoice = async (hist: History) => {
+    try {
+      const text = generateMarkdownInvoice(hist, items);
+      await navigator.clipboard.writeText(text);
+      setCopiedHistoryId(hist.id);
+      setTimeout(() => {
+        setCopiedHistoryId(prev => (prev === hist.id ? null : prev));
+      }, 2000);
+    } catch (err) {
+      console.error("Gagal menyalin invoice ke clipboard", err);
+    }
+  };
+
   // Handler Tambah Item ke POS Keranjang Kasir
   const handleAddItemToCart = (item: Item) => {
     if (item.quantity <= 0) return;
@@ -399,20 +414,42 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                         </div>
                         <h3 className="text-base font-bold text-zinc-100 mb-1 line-clamp-2">{hist.description}</h3>
                       </div>
-                      {(isAdmin || isDummyUser) && (
-                        <div className="flex gap-2 shrink-0 md:opacity-0 opacity-100 group-hover:opacity-100 transition-opacity z-10">
-                          {/* Tombol Cetak Ulang hanya muncul untuk tipe Invoice Rental */}
-                          {hist.type === 'INVOICE_RENTAL' && (
-                            <ReprintInvoiceDialog history={hist}>
-                              <button className="p-2 bg-zinc-800 hover:bg-zinc-700 text-emerald-400 rounded-md transition-colors shadow-sm" title="Cetak Ulang Invoice">
-                                <Printer className="w-4 h-4" />
-                              </button>
-                            </ReprintInvoiceDialog>
+                      <div className="flex items-center gap-2 shrink-0 md:opacity-0 opacity-100 group-hover:opacity-100 transition-opacity z-10">
+                        {/* Tombol Copy Clipboard */}
+                        <div className="relative">
+                          <button
+                            onClick={() => handleCopyInvoice(hist)}
+                            className={`p-2 rounded-md transition-all shadow-sm ${
+                              copiedHistoryId === hist.id
+                                ? "bg-emerald-950/80 border border-emerald-700 text-emerald-400"
+                                : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
+                            }`}
+                            title="Salin Data Invoice (Markdown)"
+                          >
+                            {copiedHistoryId === hist.id ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                          </button>
+                          {copiedHistoryId === hist.id && (
+                            <div className="absolute -bottom-8 right-0 bg-emerald-600 text-white text-[11px] font-semibold px-2 py-0.5 rounded shadow-lg whitespace-nowrap z-30 animate-in fade-in zoom-in-95 duration-150">
+                              Invoice disalin!
+                            </div>
                           )}
-                          <button onClick={() => setEditingHistory(hist)} className="p-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-md transition-colors shadow-sm"><Pencil className="w-4 h-4" /></button>
-                          <button onClick={() => setDeletingHistory(hist)} className="p-2 bg-red-950/50 hover:bg-red-900 text-red-400 rounded-md transition-colors shadow-sm"><Trash2 className="w-4 h-4" /></button>
                         </div>
-                      )}
+
+                        {/* Tombol Cetak Ulang hanya muncul untuk tipe Invoice Rental */}
+                        {hist.type === 'INVOICE_RENTAL' && (
+                          <ReprintInvoiceDialog history={hist}>
+                            <button className="p-2 bg-zinc-800 hover:bg-zinc-700 text-emerald-400 rounded-md transition-colors shadow-sm" title="Cetak Ulang Invoice">
+                              <Printer className="w-4 h-4" />
+                            </button>
+                          </ReprintInvoiceDialog>
+                        )}
+                        {(isAdmin || isDummyUser) && (
+                          <>
+                            <button onClick={() => setEditingHistory(hist)} className="p-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-md transition-colors shadow-sm" title="Ubah Catatan"><Pencil className="w-4 h-4" /></button>
+                            <button onClick={() => setDeletingHistory(hist)} className="p-2 bg-red-950/50 hover:bg-red-900 text-red-400 rounded-md transition-colors shadow-sm" title="Hapus Riwayat"><Trash2 className="w-4 h-4" /></button>
+                          </>
+                        )}
+                      </div>
                     </div>
                     
                     <div className="mt-4 bg-zinc-950/50 rounded-lg p-2.5 border border-zinc-800/50 max-h-36 overflow-y-auto space-y-3">
