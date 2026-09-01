@@ -27,7 +27,7 @@ export function AddToPackageDialog({
   const [mode, setMode] = useState<'existing' | 'new'>('existing');
   const [selectedPackage, setSelectedPackage] = useState("");
   const [newPackageName, setNewPackageName] = useState("");
-  const [quantity, setQuantity] = useState(1);
+  const [quantity, setQuantity] = useState<number | "">(1);
   const [footnote, setFootnote] = useState("");
   const [loading, setLoading] = useState(false);
   const [isDummyUser, setIsDummyUser] = useState(false);
@@ -58,7 +58,7 @@ export function AddToPackageDialog({
         body: JSON.stringify({
           packageId: mode === 'existing' ? selectedPackage : undefined,
           newPackageName: mode === 'new' ? newPackageName : undefined,
-          quantity: quantity,
+          quantity: Number(quantity) || 1,
           item: {
             id: item.id,
             code: item.code,
@@ -173,11 +173,21 @@ export function AddToPackageDialog({
                   Jumlah (Quantity)
                 </label>
                 <input
-                  type="number"
-                  min="1"
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-sm text-zinc-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-sm text-zinc-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none font-bold"
                   value={quantity}
-                  onChange={(e) => setQuantity(Number(e.target.value))}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === "" || /^\d+$/.test(val)) {
+                      setQuantity(val === "" ? "" : parseInt(val));
+                    }
+                  }}
+                  onBlur={() => {
+                    if (quantity === "" || Number(quantity) < 1) setQuantity(1);
+                  }}
                 />
               </div>
 

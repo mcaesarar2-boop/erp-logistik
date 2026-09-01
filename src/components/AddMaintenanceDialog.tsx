@@ -49,8 +49,8 @@ export function AddMaintenanceDialog({ items }: AddMaintenanceDialogProps) {
     setShowResults(false)
   }
 
-  const updateQty = (id: string, newQty: number) => {
-    setCart(cart.map(c => c.id === id ? { ...c, qty: Math.min(Math.max(1, newQty), c.quantity) } : c))
+  const updateQty = (id: string, newQty: any) => {
+    setCart(cart.map(c => c.id === id ? { ...c, qty: newQty === "" ? "" : Math.min(Math.max(1, parseInt(newQty) || 0), c.quantity) } : c))
   }
 
   async function handleSubmit(formData: FormData) {
@@ -65,7 +65,7 @@ export function AddMaintenanceDialog({ items }: AddMaintenanceDialogProps) {
       return
     }
     
-    formData.append("payload", JSON.stringify(cart.map(c => ({ id: c.id, qty: c.qty }))))
+    formData.append("payload", JSON.stringify(cart.map(c => ({ id: c.id, qty: Number(c.qty) || 1 }))))
     const result = await addBulkMaintenance(formData)
     
     if (result && !result.success) {
@@ -142,10 +142,21 @@ export function AddMaintenanceDialog({ items }: AddMaintenanceDialogProps) {
               )}
             </div>
 
-            <div className="flex-1 flex flex-col min-h-0">
-              <Label className="mb-2 block shrink-0">Daftar Aset Yang Akan Dipelihara:</Label>
+            <div className="flex flex-col gap-2 pt-2 flex-1 overflow-hidden">
+              <div className="flex justify-between items-center">
+                <Label>Daftar Aset Yang Akan Dipelihara (Masuk Maintenance)</Label>
+                {cart.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setCart([])}
+                    className="text-[10px] sm:text-xs text-red-400 hover:text-red-300 transition-colors font-medium"
+                  >
+                    Kosongkan Daftar
+                  </button>
+                )}
+              </div>
               {cart.length === 0 ? (
-                <div className="p-6 border border-dashed border-zinc-800 rounded-lg text-center text-zinc-500 text-sm shrink-0">Belum ada aset yang dipilih.</div>
+                <div className="p-6 border border-dashed border-zinc-800 rounded-lg text-center text-zinc-500 text-sm shrink-0">Belum ada barang yang dipilih.</div>
               ) : (
                 <div className="space-y-4 overflow-y-auto overflow-x-hidden pr-2 flex-1">
                   {groupItemsByPrimaryCategory(cart, items).map(group => (
@@ -177,7 +188,23 @@ export function AddMaintenanceDialog({ items }: AddMaintenanceDialogProps) {
                             <div className="flex items-center justify-between mt-1 pt-2 border-t border-zinc-800/50">
                               <div className="flex items-center gap-2">
                                 <Label className="text-xs shrink-0">Qty:</Label>
-                                <Input type="number" min="1" max={item.quantity} value={item.qty} onChange={(e) => updateQty(item.id, parseInt(e.target.value)||1)} className="w-16 sm:w-20 h-8 text-xs bg-zinc-950 border-zinc-700 text-center font-bold" />
+                                <Input 
+                                  type="text" 
+                                  inputMode="numeric" 
+                                  pattern="[0-9]*" 
+                                  value={item.qty} 
+                                  onFocus={(e) => e.target.select()}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val === "" || /^\d+$/.test(val)) {
+                                      updateQty(item.id, val === "" ? "" : parseInt(val));
+                                    }
+                                  }} 
+                                  onBlur={() => {
+                                    if (item.qty === "" || Number(item.qty) < 1) updateQty(item.id, 1);
+                                  }}
+                                  className="w-16 sm:w-20 h-8 text-xs bg-zinc-950 border-zinc-700 text-center font-bold" 
+                                />
                               </div>
                             </div>
                           </div>

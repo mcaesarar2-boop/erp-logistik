@@ -239,17 +239,41 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Harga Beli Satuan (Rp)</Label>
-                  <Input name="price" type="number" min="0" placeholder="1000000" className="bg-zinc-900 border-zinc-800" />
+                  <Input 
+                    name="price" 
+                    type="text" 
+                    inputMode="numeric" 
+                    pattern="[0-9]*" 
+                    placeholder="1000000" 
+                    onFocus={(e) => e.target.select()} 
+                    className="bg-zinc-900 border-zinc-800" 
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Persentase Sewa/Hari (%)</Label>
-                  <Input name="rentPercentage" type="number" min="0" max="100" step="0.1" defaultValue="5.0" className="bg-zinc-900 border-zinc-800" />
+                  <Input 
+                    name="rentPercentage" 
+                    type="text" 
+                    inputMode="decimal" 
+                    defaultValue="5.0" 
+                    onFocus={(e) => e.target.select()} 
+                    className="bg-zinc-900 border-zinc-800" 
+                  />
                 </div>
               </div>
 
               <div className="space-y-2">
                 <Label>Jumlah Unit Awal (Unit Masuk)</Label>
-                <Input name="quantity" type="number" min="1" placeholder="Masukkan jumlah unit" className="bg-zinc-900 border-zinc-800" required />
+                <Input 
+                  name="quantity" 
+                  type="text" 
+                  inputMode="numeric" 
+                  pattern="[0-9]*" 
+                  placeholder="Masukkan jumlah unit" 
+                  onFocus={(e) => e.target.select()} 
+                  className="bg-zinc-900 border-zinc-800" 
+                  required 
+                />
               </div>
 
               <div className="space-y-2">
@@ -322,7 +346,16 @@ export function AddItemDialog({ items, categories }: AddItemDialogProps) {
 
               <div className="space-y-2 pt-2">
                 <Label>Jumlah Tambahan (Unit Masuk)</Label>
-                <Input name="quantity" type="number" min="1" placeholder="Masukkan jumlah unit" className="bg-zinc-900 border-zinc-800" required />
+                <Input 
+                  name="quantity" 
+                  type="text" 
+                  inputMode="numeric" 
+                  pattern="[0-9]*" 
+                  placeholder="Masukkan jumlah unit" 
+                  onFocus={(e) => e.target.select()} 
+                  className="bg-zinc-900 border-zinc-800" 
+                  required 
+                />
               </div>
 
               <Button type="submit" disabled={!selectedItemId} className="w-full bg-zinc-50 text-zinc-950 hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed">

@@ -103,8 +103,8 @@ export function ReturnRentalDialog({ items, activeEvent }: ReturnRentalDialogPro
     setShowResults(false)
   }
 
-  const updateQty = (id: string, newQty: number) => {
-    setCart(cart.map(c => c.id === id ? { ...c, qty: Math.min(Math.max(1, newQty), c.rentedQuantity) } : c))
+  const updateQty = (id: string, newQty: any) => {
+    setCart(cart.map(c => c.id === id ? { ...c, qty: newQty === "" ? "" : Math.min(Math.max(1, parseInt(newQty) || 0), c.rentedQuantity) } : c))
   }
 
   async function handleSubmit(formData: FormData) {
@@ -119,7 +119,7 @@ export function ReturnRentalDialog({ items, activeEvent }: ReturnRentalDialogPro
       return
     }
     
-    formData.append("payload", JSON.stringify(cart.map(c => ({ id: c.id, qty: c.qty }))))
+    formData.append("payload", JSON.stringify(cart.map(c => ({ id: c.id, qty: Number(c.qty) || 1 }))))
     
     // Jika ada activeEvent, update history payload agar mencatat sisa pengembalian
     if (activeEvent) {
@@ -128,7 +128,8 @@ export function ReturnRentalDialog({ items, activeEvent }: ReturnRentalDialogPro
       const newPayload = currentPayload.map((p: any) => {
         const returnedItem = cart.find(c => c.id === p.id || c.code === p.code);
         if (returnedItem) {
-          return { ...p, returnedQty: (p.returnedQty || 0) + returnedItem.qty };
+          const newReturnedQty = (p.returnedQty || 0) + (Number(returnedItem.qty) || 1);
+          return { ...p, returnedQty: newReturnedQty };
         }
         return p;
       });
@@ -274,7 +275,23 @@ export function ReturnRentalDialog({ items, activeEvent }: ReturnRentalDialogPro
                           <div className="flex items-center justify-between mt-1 pt-2 border-t border-zinc-800/50">
                             <div className="flex items-center gap-2 bg-zinc-950 px-2.5 py-1 rounded-md border border-zinc-700">
                               <Label className="text-xs shrink-0 text-blue-400 font-medium">Jumlah Kembali:</Label>
-                              <Input type="number" min="1" max={item.rentedQuantity} value={item.qty} onChange={(e) => updateQty(item.id, parseInt(e.target.value)||1)} className="w-16 sm:w-20 h-7 text-xs bg-zinc-900 border-zinc-700 text-center font-bold text-zinc-100" />
+                              <Input 
+                                type="text" 
+                                inputMode="numeric" 
+                                pattern="[0-9]*" 
+                                value={item.qty} 
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (val === "" || /^\d+$/.test(val)) {
+                                    updateQty(item.id, val === "" ? "" : parseInt(val));
+                                  }
+                                }} 
+                                onBlur={() => {
+                                  if (item.qty === "" || Number(item.qty) < 1) updateQty(item.id, 1);
+                                }}
+                                className="w-16 sm:w-20 h-7 text-xs bg-zinc-900 border-zinc-700 text-center font-bold text-zinc-100" 
+                              />
                               <span className="text-xs text-zinc-400">Unit</span>
                             </div>
                             <p className="text-[11px] text-zinc-500">Maks: {item.rentedQuantity} Unit</p>

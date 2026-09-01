@@ -34,21 +34,27 @@ export function EditItemDialog({ item, allCategories }: EditItemDialogProps) {
   const [isDummyUser, setIsDummyUser] = useState(false)
   const [showDemoWarning, setShowDemoWarning] = useState(false)
 
-  const [available, setAvailable] = useState(item.quantity || 0)
-  const [rented, setRented] = useState(item.rentedQuantity || 0)
-  const [maintenance, setMaintenance] = useState(item.maintenanceQuantity || 0)
+  const [available, setAvailable] = useState<number | "">(item.quantity || 0)
+  const [rented, setRented] = useState<number | "">(item.rentedQuantity || 0)
+  const [maintenance, setMaintenance] = useState<number | "">(item.maintenanceQuantity || 0)
 
   const totalStockOriginal = (item.quantity || 0) + (item.rentedQuantity || 0) + (item.maintenanceQuantity || 0)
 
   // --- LOGIKA AUTOMISASI DISTRIBUSI STOK ---
-  const handleAvailableChange = (val: number) => {
+  const handleAvailableChange = (rawVal: any) => {
+    if (rawVal === "") {
+      setAvailable("");
+      return;
+    }
+    let val = parseInt(rawVal) || 0;
     if (val < 0) val = 0;
     if (val > totalStockOriginal) val = totalStockOriginal;
     
-    const excess = totalStockOriginal - val - maintenance;
+    const currentMaint = Number(maintenance) || 0;
+    const excess = totalStockOriginal - val - currentMaint;
     if (excess >= 0) {
       setRented(excess);
-      setAvailable(totalStockOriginal - excess - maintenance);
+      setAvailable(totalStockOriginal - excess - currentMaint);
     } else {
       setRented(0);
       setMaintenance(totalStockOriginal - val);
@@ -56,22 +62,34 @@ export function EditItemDialog({ item, allCategories }: EditItemDialogProps) {
     }
   }
 
-  const handleRentedChange = (val: number) => {
+  const handleRentedChange = (rawVal: any) => {
+    if (rawVal === "") {
+      setRented("");
+      return;
+    }
+    let val = parseInt(rawVal) || 0;
     if (val < 0) val = 0;
-    if (val + maintenance > totalStockOriginal) {
-      val = totalStockOriginal - maintenance;
+    const currentMaint = Number(maintenance) || 0;
+    if (val + currentMaint > totalStockOriginal) {
+      val = totalStockOriginal - currentMaint;
     }
     setRented(val);
-    setAvailable(totalStockOriginal - val - maintenance);
+    setAvailable(totalStockOriginal - val - currentMaint);
   }
 
-  const handleMaintenanceChange = (val: number) => {
-    if (val < 0) val = 0;
-    if (val + rented > totalStockOriginal) {
-      val = totalStockOriginal - rented;
+  const handleMaintenanceChange = (rawVal: any) => {
+    if (rawVal === "") {
+      setMaintenance("");
+      return;
+    }
+    let val = parseInt(rawVal) || 0;
+    if (rawVal < 0) val = 0;
+    const currentRented = Number(rented) || 0;
+    if (val + currentRented > totalStockOriginal) {
+      val = totalStockOriginal - currentRented;
     }
     setMaintenance(val);
-    setAvailable(totalStockOriginal - rented - val);
+    setAvailable(totalStockOriginal - currentRented - val);
   }
 
   // Reset form saat dialog dibuka
@@ -92,9 +110,9 @@ export function EditItemDialog({ item, allCategories }: EditItemDialogProps) {
       setShowDemoWarning(true)
       return
     }
-    formData.append("quantity", available.toString());
-    formData.append("rentedQuantity", rented.toString());
-    formData.append("maintenanceQuantity", maintenance.toString());
+    formData.append("quantity", (Number(available) || 0).toString());
+    formData.append("rentedQuantity", (Number(rented) || 0).toString());
+    formData.append("maintenanceQuantity", (Number(maintenance) || 0).toString());
     // Jalankan server action dengan mengikat ID item terkait
     await updateItem(item.id, formData)
     setOpen(false) 
@@ -152,11 +170,28 @@ export function EditItemDialog({ item, allCategories }: EditItemDialogProps) {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Harga Beli Satuan (Rp)</Label>
-              <Input name="price" type="number" min="0" defaultValue={item.price || 0} className="bg-zinc-900 border-zinc-800" required />
+              <Input 
+                name="price" 
+                type="text" 
+                inputMode="numeric" 
+                pattern="[0-9]*" 
+                defaultValue={item.price || 0} 
+                onFocus={(e) => e.target.select()} 
+                className="bg-zinc-900 border-zinc-800" 
+                required 
+              />
             </div>
             <div className="space-y-2">
               <Label>Persentase Sewa (%)</Label>
-              <Input name="rentPercentage" type="number" min="0" step="0.1" defaultValue={item.rentPercentage || 0} className="bg-zinc-900 border-zinc-800" required />
+              <Input 
+                name="rentPercentage" 
+                type="text" 
+                inputMode="decimal" 
+                defaultValue={item.rentPercentage || 0} 
+                onFocus={(e) => e.target.select()} 
+                className="bg-zinc-900 border-zinc-800" 
+                required 
+              />
             </div>
           </div>
 
@@ -183,15 +218,63 @@ export function EditItemDialog({ item, allCategories }: EditItemDialogProps) {
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-1">
                 <Label className="text-xs text-emerald-400">🟢 Tersedia</Label>
-                <Input type="number" min="0" max={totalStockOriginal} value={available} onChange={e => handleAvailableChange(parseInt(e.target.value)||0)} className="bg-emerald-950/20 border-emerald-900/50 text-emerald-400 font-bold" />
+                <Input 
+                  type="text" 
+                  inputMode="numeric" 
+                  pattern="[0-9]*" 
+                  value={available} 
+                  onFocus={(e) => e.target.select()} 
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (val === "" || /^\d+$/.test(val)) {
+                      handleAvailableChange(val);
+                    }
+                  }} 
+                  onBlur={() => {
+                    if (available === "" || Number(available) < 0) handleAvailableChange(0);
+                  }}
+                  className="bg-emerald-950/20 border-emerald-900/50 text-emerald-400 font-bold text-center" 
+                />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs text-amber-400">🟡 Rented</Label>
-                <Input type="number" min="0" max={totalStockOriginal} value={rented} onChange={e => handleRentedChange(parseInt(e.target.value)||0)} className="bg-amber-950/20 border-amber-900/50 text-amber-400 font-bold" />
+                <Input 
+                  type="text" 
+                  inputMode="numeric" 
+                  pattern="[0-9]*" 
+                  value={rented} 
+                  onFocus={(e) => e.target.select()} 
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (val === "" || /^\d+$/.test(val)) {
+                      handleRentedChange(val);
+                    }
+                  }} 
+                  onBlur={() => {
+                    if (rented === "" || Number(rented) < 0) handleRentedChange(0);
+                  }}
+                  className="bg-amber-950/20 border-amber-900/50 text-amber-400 font-bold text-center" 
+                />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs text-red-400">🔴 Maint.</Label>
-                <Input type="number" min="0" max={totalStockOriginal} value={maintenance} onChange={e => handleMaintenanceChange(parseInt(e.target.value)||0)} className="bg-red-950/20 border-red-900/50 text-red-400 font-bold" />
+                <Input 
+                  type="text" 
+                  inputMode="numeric" 
+                  pattern="[0-9]*" 
+                  value={maintenance} 
+                  onFocus={(e) => e.target.select()} 
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (val === "" || /^\d+$/.test(val)) {
+                      handleMaintenanceChange(val);
+                    }
+                  }} 
+                  onBlur={() => {
+                    if (maintenance === "" || Number(maintenance) < 0) handleMaintenanceChange(0);
+                  }}
+                  className="bg-red-950/20 border-red-900/50 text-red-400 font-bold text-center" 
+                />
               </div>
             </div>
           </div>

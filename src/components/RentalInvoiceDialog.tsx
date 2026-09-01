@@ -32,9 +32,9 @@ export function RentalInvoiceDialog({ items }: RentalInvoiceDialogProps) {
   const [open, setOpen] = useState(false)
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0])
   const [isSaving, setIsSaving] = useState(false)
-  const [discountPercentage, setDiscountPercentage] = useState<number>(0)
+  const [discountPercentage, setDiscountPercentage] = useState<number | "">(0)
   const [discountDesc, setDiscountDesc] = useState<string>("")
-  const [rentalDays, setRentalDays] = useState<number>(1)
+  const [rentalDays, setRentalDays] = useState<number | "">(1)
   const [cart, setCart] = useState<any[]>([])
   const [isDummyUser, setIsDummyUser] = useState(false)
   const [showDemoWarning, setShowDemoWarning] = useState(false)
@@ -57,8 +57,8 @@ export function RentalInvoiceDialog({ items }: RentalInvoiceDialogProps) {
     }
   }, [open, items])
 
-  const updateQty = (id: string, newQty: number) => {
-    setCart(cart.map(c => c.id === id ? { ...c, qty: Math.min(Math.max(1, newQty), c.rentedQuantity) } : c))
+  const updateQty = (id: string, newQty: any) => {
+    setCart(cart.map(c => c.id === id ? { ...c, qty: newQty === "" ? "" : Math.min(Math.max(1, parseInt(newQty) || 0), c.rentedQuantity) } : c))
   }
 
   const updateFootnote = (id: string, footnote: string) => {
@@ -71,12 +71,15 @@ export function RentalInvoiceDialog({ items }: RentalInvoiceDialogProps) {
 
   const groupedCart = useMemo(() => groupItemsByPrimaryCategory(cart, items), [cart, items]);
 
+  const safeRentalDays = Number(rentalDays) || 1
+  const safeDiscountPercentage = Number(discountPercentage) || 0
+
   const subTotal = cart.reduce((acc, item) => {
     const rentPricePerItem = ((item.price || 0) * (item.rentPercentage || 0)) / 100
-    return acc + (item.qty * rentPricePerItem * rentalDays)
+    return acc + ((Number(item.qty) || 1) * rentPricePerItem * safeRentalDays)
   }, 0)
 
-  const discountAmount = subTotal * (discountPercentage / 100)
+  const discountAmount = subTotal * (safeDiscountPercentage / 100)
   const grandTotal = subTotal - discountAmount
 
   const handlePrintAndSave = async () => {
@@ -90,12 +93,12 @@ export function RentalInvoiceDialog({ items }: RentalInvoiceDialogProps) {
     formData.append("type", "INVOICE_RENTAL")
     formData.append("date", invoiceDate)
     
-    let historyDesc = `Cetak Invoice Rental (${cart.reduce((acc, i) => acc + i.qty, 0)} Unit Aset)`
-    if (rentalDays > 1) {
-      historyDesc += ` - ${rentalDays} Hari`
+    let historyDesc = `Cetak Invoice Rental (${cart.reduce((acc, i) => acc + (Number(i.qty) || 1), 0)} Unit Aset)`
+    if (safeRentalDays > 1) {
+      historyDesc += ` - ${safeRentalDays} Hari`
     }
-    if (discountPercentage > 0) {
-      historyDesc += ` - Diskon ${discountPercentage}%`
+    if (safeDiscountPercentage > 0) {
+      historyDesc += ` - Diskon ${safeDiscountPercentage}%`
       if (discountDesc.trim() !== "") {
         historyDesc += ` (${discountDesc.trim()})`
       }
@@ -106,9 +109,9 @@ export function RentalInvoiceDialog({ items }: RentalInvoiceDialogProps) {
     const payload = cart.map(i => ({
       name: i.name, 
       code: i.code, 
-      qty: i.qty, 
+      qty: Number(i.qty) || 1, 
       imageUrl: i.imageUrl || null,
-      price: (((i.price || 0) * (i.rentPercentage || 0)) / 100) * rentalDays * (1 - (discountPercentage / 100)),
+      price: (((i.price || 0) * (i.rentPercentage || 0)) / 100) * safeRentalDays * (1 - (safeDiscountPercentage / 100)),
       footnote: i.footnote || ""
     }))
     formData.append("payload", JSON.stringify(payload))
@@ -180,7 +183,7 @@ export function RentalInvoiceDialog({ items }: RentalInvoiceDialogProps) {
                   <div className="flex flex-col gap-2.5">
                     {group.items.map(item => {
                       const rentPricePerItem = ((item.price || 0) * (item.rentPercentage || 0)) / 100;
-                      const totalItemRent = rentPricePerItem * item.qty * rentalDays;
+                      const totalItemRent = rentPricePerItem * (Number(item.qty) || 1) * safeRentalDays;
                       return (
                         <div key={item.id} className="bg-zinc-900/50 print:bg-transparent border border-zinc-800 print:border-b print:border-zinc-300 print:border-x-0 print:border-t-0 p-3 rounded-lg print:rounded-none flex flex-col gap-2">
                           <div className="flex justify-between items-start gap-3">
@@ -199,7 +202,23 @@ export function RentalInvoiceDialog({ items }: RentalInvoiceDialogProps) {
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-2 print:hidden">
                                 <Label className="text-xs shrink-0">Qty:</Label>
-                                <Input type="number" min="1" max={item.rentedQuantity} value={item.qty} onChange={(e) => updateQty(item.id, parseInt(e.target.value)||1)} className="w-16 sm:w-20 h-8 text-xs bg-zinc-950 border-zinc-700 text-center font-bold" />
+                                <Input 
+                                  type="text" 
+                                  inputMode="numeric" 
+                                  pattern="[0-9]*" 
+                                  value={item.qty} 
+                                  onFocus={(e) => e.target.select()}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val === "" || /^\d+$/.test(val)) {
+                                      updateQty(item.id, val === "" ? "" : parseInt(val));
+                                    }
+                                  }} 
+                                  onBlur={() => {
+                                    if (item.qty === "" || Number(item.qty) < 1) updateQty(item.id, 1);
+                                  }}
+                                  className="w-16 sm:w-20 h-8 text-xs bg-zinc-950 border-zinc-700 text-center font-bold" 
+                                />
                               </div>
                               <div className="text-right shrink-0">
                                 <div className="text-xs text-zinc-400 print:text-zinc-600 mb-0.5 hidden print:block">
@@ -230,18 +249,50 @@ export function RentalInvoiceDialog({ items }: RentalInvoiceDialogProps) {
           <div className="bg-zinc-900 print:bg-transparent border border-zinc-800 print:border-none rounded-lg p-4 flex flex-col gap-2 mb-4">
             <div className="flex justify-between items-center print:hidden">
               <Label className="text-zinc-300">Durasi Rental (Hari)</Label>
-              <Input type="number" min="1" value={rentalDays} onChange={(e) => setRentalDays(Math.max(1, parseInt(e.target.value) || 1))} className="w-20 h-8 text-right text-xs bg-zinc-950 border-zinc-800" />
+              <Input 
+                type="text" 
+                inputMode="numeric" 
+                pattern="[0-9]*" 
+                value={rentalDays} 
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === "" || /^\d+$/.test(val)) {
+                    setRentalDays(val === "" ? "" : parseInt(val));
+                  }
+                }} 
+                onBlur={() => {
+                  if (rentalDays === "" || Number(rentalDays) < 1) setRentalDays(1);
+                }}
+                className="w-20 h-8 text-center font-bold text-xs bg-zinc-950 border-zinc-800" 
+              />
             </div>
             <div className="flex justify-between items-center text-sm text-zinc-400 print:text-zinc-600">
-              <span>Subtotal (Dari {cart.reduce((acc, i) => acc + i.qty, 0)} Unit Aset):</span>
+              <span>Subtotal (Dari {cart.reduce((acc, i) => acc + (Number(i.qty) || 1), 0)} Unit Aset):</span>
               <span>{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(subTotal)}</span>
             </div>
             
             <div className="flex justify-between items-center print:hidden">
               <Label className="text-zinc-300">Diskon Keseluruhan (%)</Label>
-              <Input type="number" min="0" max="100" value={discountPercentage} onChange={(e) => setDiscountPercentage(parseFloat(e.target.value) || 0)} className="w-20 h-8 text-right text-xs bg-zinc-950 border-zinc-800" />
+              <Input 
+                type="text" 
+                inputMode="numeric" 
+                pattern="[0-9]*" 
+                value={discountPercentage} 
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === "" || /^\d+$/.test(val)) {
+                    setDiscountPercentage(val === "" ? "" : Math.min(100, parseInt(val)));
+                  }
+                }} 
+                onBlur={() => {
+                  if (discountPercentage === "" || Number(discountPercentage) < 0) setDiscountPercentage(0);
+                }}
+                className="w-20 h-8 text-center font-bold text-xs bg-zinc-950 border-zinc-800" 
+              />
             </div>
-            {discountPercentage > 0 && (
+            {Number(discountPercentage) > 0 && (
               <>
                 <div className="flex justify-between items-center print:hidden">
                   <Label className="text-zinc-300">Keterangan Diskon</Label>

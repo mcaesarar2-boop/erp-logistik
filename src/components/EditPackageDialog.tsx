@@ -93,11 +93,11 @@ export function EditPackageDialog({ pkg, items }: EditPackageDialogProps) {
     setShowResults(false)
   }
 
-  const updateQty = (id: string, newQty: number) => {
+  const updateQty = (id: string, newQty: any) => {
     setCart(cart.map(c => {
       if (c.id === id) {
         const totalInventory = (c.quantity || 0) + (c.rentedQuantity || 0) + (c.maintenanceQuantity || 0)
-        return { ...c, qty: Math.min(Math.max(1, newQty), totalInventory) }
+        return { ...c, qty: newQty === "" ? "" : Math.min(Math.max(1, parseInt(newQty) || 0), totalInventory) }
       }
       return c
     }))
@@ -123,12 +123,12 @@ export function EditPackageDialog({ pkg, items }: EditPackageDialogProps) {
       setErrorMsg("Belum ada barang yang dipilih.")
       return
     }
-    if (!packageName) {
+    if (!packageName.trim()) {
       setErrorMsg("Nama paket tidak boleh kosong.")
       return
     }
     
-    formData.append("payload", JSON.stringify(cart.map(c => ({ id: c.id, qty: c.qty, name: c.name, code: c.code, price: c.price, rentPercentage: c.rentPercentage, footnote: c.footnote }))))
+    formData.append("payload", JSON.stringify(cart.map(c => ({ id: c.id, qty: Number(c.qty) || 1, name: c.name, code: c.code, price: c.price, rentPercentage: c.rentPercentage, footnote: c.footnote }))))
     const result = await updatePackageTemplate(pkg.id, formData)
     
     if (result && !result.success) {
@@ -230,7 +230,23 @@ export function EditPackageDialog({ pkg, items }: EditPackageDialogProps) {
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
                                   <Label className="text-xs">Qty:</Label>
-                                  <Input type="number" min="1" max={totalInventory} value={item.qty} onChange={(e) => updateQty(item.id, parseInt(e.target.value)||1)} className="w-16 h-8 text-xs bg-zinc-950 border-zinc-700 text-center font-bold" />
+                                  <Input 
+                                    type="text" 
+                                    inputMode="numeric" 
+                                    pattern="[0-9]*" 
+                                    value={item.qty} 
+                                    onFocus={(e) => e.target.select()}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      if (val === "" || /^\d+$/.test(val)) {
+                                        updateQty(item.id, val === "" ? "" : parseInt(val));
+                                      }
+                                    }} 
+                                    onBlur={() => {
+                                      if (item.qty === "" || Number(item.qty) < 1) updateQty(item.id, 1);
+                                    }}
+                                    className="w-16 h-8 text-xs bg-zinc-950 border-zinc-700 text-center font-bold" 
+                                  />
                                   <button type="button" onClick={() => setCart(cart.filter(c => c.id !== item.id))} className="text-zinc-500 hover:text-red-400 p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded shrink-0 transition-colors"><Trash2 className="w-4 h-4"/></button>
                                 </div>
                               </div>

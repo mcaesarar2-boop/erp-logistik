@@ -42,15 +42,15 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
   const [selectedPackageId, setSelectedPackageId] = useState<string>("")
   const [isDeletingPkg, setIsDeletingPkg] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [discountPercentage, setDiscountPercentage] = useState<number>(0)
+  const [discountPercentage, setDiscountPercentage] = useState<number | "">(0)
   const [discountDesc, setDiscountDesc] = useState<string>("")
   const [eventName, setEventName] = useState<string>("")
-  const [rentalDays, setRentalDays] = useState<number>(1)
+  const [rentalDays, setRentalDays] = useState<number | "">(1)
   
-  const [customItems, setCustomItems] = useState<{id: string, name: string, qty: number, price: number, footnote: string}[]>([])
+  const [customItems, setCustomItems] = useState<{id: string, name: string, qty: number | "", price: number | "", footnote: string}[]>([])
   const [customName, setCustomName] = useState("")
-  const [customQty, setCustomQty] = useState<number>(1)
-  const [customPrice, setCustomPrice] = useState<number>(0)
+  const [customQty, setCustomQty] = useState<number | "">(1)
+  const [customPrice, setCustomPrice] = useState<number | "">(0)
 
   const [isAdmin, setIsAdmin] = useState(false)
   const [isDummyUser, setIsDummyUser] = useState(false)
@@ -207,8 +207,8 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
     setWarningMsg(null);
   }
 
-  const updateQty = (id: string, newQty: number) => {
-    setCart(cart.map(c => c.id === id ? { ...c, qty: Math.min(Math.max(1, newQty), c.quantity) } : c))
+  const updateQty = (id: string, newQty: any) => {
+    setCart(cart.map(c => c.id === id ? { ...c, qty: newQty === "" ? "" : Math.min(Math.max(1, parseInt(newQty) || 0), c.quantity) } : c))
   }
 
   const updateFootnote = (id: string, footnote: string) => {
@@ -220,8 +220,8 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
     setCustomItems([...customItems, {
       id: `custom-${Date.now()}`,
       name: customName,
-      qty: customQty,
-      price: customPrice,
+      qty: Number(customQty) || 1,
+      price: Number(customPrice) || 0,
       footnote: ""
     }])
     setCustomName("")
@@ -229,12 +229,12 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
     setCustomPrice(0)
   }
 
-  const updateCustomQty = (id: string, newQty: number) => {
-    setCustomItems(customItems.map(c => c.id === id ? { ...c, qty: Math.max(1, newQty) } : c))
+  const updateCustomQty = (id: string, newQty: any) => {
+    setCustomItems(customItems.map(c => c.id === id ? { ...c, qty: newQty === "" ? "" : Math.max(1, parseInt(newQty) || 0) } : c))
   }
 
-  const updateCustomPrice = (id: string, newPrice: number) => {
-    setCustomItems(customItems.map(c => c.id === id ? { ...c, price: Math.max(0, newPrice) } : c))
+  const updateCustomPrice = (id: string, newPrice: any) => {
+    setCustomItems(customItems.map(c => c.id === id ? { ...c, price: newPrice === "" ? "" : Math.max(0, parseInt(newPrice) || 0) } : c))
   }
 
   const updateCustomFootnote = (id: string, newFootnote: string) => {
@@ -257,7 +257,7 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
     }
     
     if (cart.length > 0) {
-      formData.append("payload", JSON.stringify(cart.map(c => ({ id: c.id, qty: c.qty }))))
+      formData.append("payload", JSON.stringify(cart.map(c => ({ id: c.id, qty: Number(c.qty) || 1 }))))
       const result = await addBulkRental(formData)
       
       if (result && !result.success) {
@@ -272,8 +272,10 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
     historyFormData.append("type", "INVOICE_RENTAL")
     historyFormData.append("date", new Date().toISOString().split('T')[0])
     
-    const totalQty = cart.reduce((acc: number, i: any) => acc + i.qty, 0)
-    const totalCustomQty = customItems.reduce((acc: number, i: any) => acc + i.qty, 0)
+    const safeDays = Number(rentalDays) || 1
+    const safeDisc = Number(discountPercentage) || 0
+    const totalQty = cart.reduce((acc: number, i: any) => acc + (Number(i.qty) || 1), 0)
+    const totalCustomQty = customItems.reduce((acc: number, i: any) => acc + (Number(i.qty) || 1), 0)
     
     let historyDesc = `Invoice Rental (`
     if (totalQty > 0) historyDesc += `${totalQty} Aset`
@@ -284,11 +286,11 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
     if (eventName.trim() !== "") {
       historyDesc = `Event: ${eventName.trim()} | ` + historyDesc
     }
-    if (rentalDays > 1) {
-      historyDesc += ` - ${rentalDays} Hari`
+    if (safeDays > 1) {
+      historyDesc += ` - ${safeDays} Hari`
     }
-    if (discountPercentage > 0) {
-      historyDesc += ` - Diskon ${discountPercentage}%`
+    if (safeDisc > 0) {
+      historyDesc += ` - Diskon ${safeDisc}%`
       if (discountDesc.trim() !== "") {
         historyDesc += ` (${discountDesc.trim()})`
       }
@@ -300,20 +302,20 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
         id: c.id,
         name: c.name,
         code: c.code,
-        qty: c.qty,
+        qty: Number(c.qty) || 1,
         returnedQty: 0,
         imageUrl: c.imageUrl || null,
-        price: (((c.price || 0) * (c.rentPercentage || 0)) / 100) * rentalDays * (1 - (discountPercentage / 100)),
+        price: (((c.price || 0) * (c.rentPercentage || 0)) / 100) * safeDays * (1 - (safeDisc / 100)),
         footnote: c.footnote || ""
       })),
       ...customItems.map((c: any) => ({
         id: c.id,
         name: c.name,
         code: "LAYANAN",
-        qty: c.qty,
+        qty: Number(c.qty) || 1,
         returnedQty: 0,
         imageUrl: null,
-        price: c.price * rentalDays * (1 - (discountPercentage / 100)),
+        price: (Number(c.price) || 0) * safeDays * (1 - (safeDisc / 100)),
         footnote: c.footnote || "Layanan Tambahan"
       }))
     ]
@@ -337,10 +339,12 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
 
   const groupedCart = useMemo(() => groupItemsByPrimaryCategory(cart, items), [cart, items]);
 
-  const assetSubTotal = cart.reduce((acc, item) => acc + (item.qty * ((item.price || 0) * (item.rentPercentage || 0) / 100) * rentalDays), 0)
-  const customSubTotal = customItems.reduce((acc, item) => acc + (item.qty * item.price * rentalDays), 0)
+  const safeRentalDays = Number(rentalDays) || 1
+  const safeDiscountPercentage = Number(discountPercentage) || 0
+  const assetSubTotal = cart.reduce((acc, item) => acc + ((Number(item.qty) || 1) * ((item.price || 0) * (item.rentPercentage || 0) / 100) * safeRentalDays), 0)
+  const customSubTotal = customItems.reduce((acc, item) => acc + ((Number(item.qty) || 1) * (Number(item.price) || 0) * safeRentalDays), 0)
   const subTotal = assetSubTotal + customSubTotal
-  const discountAmount = subTotal * (discountPercentage / 100)
+  const discountAmount = subTotal * (safeDiscountPercentage / 100)
   const grandTotal = subTotal - discountAmount
 
   if (!isAdmin && !isDummyUser) return null;
@@ -441,11 +445,45 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
               <div className="flex gap-2">
                 <div className="space-y-1 w-20">
                   <Label className="text-[10px] text-blue-400/80">Qty</Label>
-                  <Input type="number" min="1" placeholder="Qty" value={customQty} onChange={e => setCustomQty(parseInt(e.target.value)||1)} className="bg-zinc-950 border-zinc-700 w-full text-xs h-9" />
+                  <Input 
+                    type="text" 
+                    inputMode="numeric" 
+                    pattern="[0-9]*" 
+                    placeholder="Qty" 
+                    value={customQty} 
+                    onFocus={(e) => e.target.select()}
+                    onChange={e => {
+                      const val = e.target.value;
+                      if (val === "" || /^\d+$/.test(val)) {
+                        setCustomQty(val === "" ? "" : parseInt(val));
+                      }
+                    }} 
+                    onBlur={() => {
+                      if (customQty === "" || Number(customQty) < 1) setCustomQty(1);
+                    }}
+                    className="bg-zinc-950 border-zinc-700 w-full text-xs h-9 text-center font-bold" 
+                  />
                 </div>
                 <div className="space-y-1 flex-1">
                   <Label className="text-[10px] text-blue-400/80">Harga / Hari</Label>
-                  <Input type="number" min="0" placeholder="Harga" value={customPrice} onChange={e => setCustomPrice(parseInt(e.target.value)||0)} className="bg-zinc-950 border-zinc-700 w-full text-xs h-9" />
+                  <Input 
+                    type="text" 
+                    inputMode="numeric" 
+                    pattern="[0-9]*" 
+                    placeholder="Harga" 
+                    value={customPrice} 
+                    onFocus={(e) => e.target.select()}
+                    onChange={e => {
+                      const val = e.target.value;
+                      if (val === "" || /^\d+$/.test(val)) {
+                        setCustomPrice(val === "" ? "" : parseInt(val));
+                      }
+                    }} 
+                    onBlur={() => {
+                      if (customPrice === "") setCustomPrice(0);
+                    }}
+                    className="bg-zinc-950 border-zinc-700 w-full text-xs h-9" 
+                  />
                 </div>
               </div>
               <Button type="button" onClick={handleAddCustomItem} disabled={!customName.trim()} className="bg-blue-600 hover:bg-blue-700 text-white w-full h-9 text-xs mt-1">Tambahkan ke Keranjang</Button>
@@ -510,11 +548,27 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-2">
                                 <Label className="text-xs shrink-0">Qty:</Label>
-                                <Input type="number" min="1" max={item.quantity} value={item.qty} onChange={(e) => updateQty(item.id, parseInt(e.target.value)||1)} className="w-16 sm:w-20 h-8 text-xs bg-zinc-950 border-zinc-700 text-center font-bold" />
+                                <Input 
+                                  type="text" 
+                                  inputMode="numeric" 
+                                  pattern="[0-9]*" 
+                                  value={item.qty} 
+                                  onFocus={(e) => e.target.select()}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val === "" || /^\d+$/.test(val)) {
+                                      updateQty(item.id, val === "" ? "" : parseInt(val));
+                                    }
+                                  }} 
+                                  onBlur={() => {
+                                    if (item.qty === "" || Number(item.qty) < 1) updateQty(item.id, 1);
+                                  }}
+                                  className="w-16 sm:w-20 h-8 text-xs bg-zinc-950 border-zinc-700 text-center font-bold" 
+                                />
                               </div>
                               <div className="text-right shrink-0">
                                 <p className="text-[10px] text-zinc-500">Nilai Sewa</p>
-                                <p className="text-xs sm:text-sm font-bold text-emerald-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.qty * ((item.price || 0) * (item.rentPercentage || 0) / 100) * rentalDays)}</p>
+                                <p className="text-xs sm:text-sm font-bold text-emerald-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format((Number(item.qty) || 1) * ((item.price || 0) * (item.rentPercentage || 0) / 100) * safeRentalDays)}</p>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -560,15 +614,47 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2">
                               <Label className="text-xs shrink-0">Qty:</Label>
-                              <Input type="number" min="1" value={item.qty} onChange={(e) => updateCustomQty(item.id, parseInt(e.target.value)||1)} className="w-16 sm:w-20 h-8 text-xs bg-zinc-950 border-zinc-700 text-center font-bold" />
+                              <Input 
+                                type="text" 
+                                inputMode="numeric" 
+                                pattern="[0-9]*" 
+                                value={item.qty} 
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (val === "" || /^\d+$/.test(val)) {
+                                    updateCustomQty(item.id, val === "" ? "" : parseInt(val));
+                                  }
+                                }} 
+                                onBlur={() => {
+                                  if (item.qty === "" || Number(item.qty) < 1) updateCustomQty(item.id, 1);
+                                }}
+                                className="w-16 sm:w-20 h-8 text-xs bg-zinc-950 border-zinc-700 text-center font-bold" 
+                              />
                             </div>
                             <div className="flex items-center gap-2">
                               <Label className="text-xs shrink-0">Tarif/Hari:</Label>
-                              <Input type="number" min="0" value={item.price} onChange={(e) => updateCustomPrice(item.id, parseInt(e.target.value)||0)} className="w-20 sm:w-24 h-8 text-xs bg-zinc-950 border-zinc-700" />
+                              <Input 
+                                type="text" 
+                                inputMode="numeric" 
+                                pattern="[0-9]*" 
+                                value={item.price} 
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (val === "" || /^\d+$/.test(val)) {
+                                    updateCustomPrice(item.id, val === "" ? "" : parseInt(val));
+                                  }
+                                }} 
+                                onBlur={() => {
+                                  if (item.price === "") updateCustomPrice(item.id, 0);
+                                }}
+                                className="w-20 sm:w-24 h-8 text-xs bg-zinc-950 border-zinc-700" 
+                              />
                             </div>
                             <div className="text-right shrink-0">
                               <p className="text-[10px] text-zinc-500">Nilai Tambahan</p>
-                              <p className="text-xs sm:text-sm font-bold text-emerald-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.qty * item.price * rentalDays)}</p>
+                              <p className="text-xs sm:text-sm font-bold text-emerald-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format((Number(item.qty) || 1) * (Number(item.price) || 0) * safeRentalDays)}</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
@@ -589,15 +675,47 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                   <div className="space-y-1">
                     <Label className="text-[10px] text-zinc-400">Durasi (Hari)</Label>
-                    <Input type="number" min="1" value={rentalDays} onChange={(e) => setRentalDays(Math.max(1, parseInt(e.target.value) || 1))} className="h-8 text-xs bg-zinc-950 border-zinc-700" />
+                    <Input 
+                      type="text" 
+                      inputMode="numeric" 
+                      pattern="[0-9]*" 
+                      value={rentalDays} 
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "" || /^\d+$/.test(val)) {
+                          setRentalDays(val === "" ? "" : parseInt(val));
+                        }
+                      }} 
+                      onBlur={() => {
+                        if (rentalDays === "" || Number(rentalDays) < 1) setRentalDays(1);
+                      }}
+                      className="h-8 text-xs bg-zinc-950 border-zinc-700 text-center font-bold" 
+                    />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px] text-zinc-400">Diskon (%)</Label>
-                    <Input type="number" min="0" max="100" value={discountPercentage} onChange={(e) => setDiscountPercentage(parseFloat(e.target.value) || 0)} className="h-8 text-xs bg-zinc-950 border-zinc-700" />
+                    <Input 
+                      type="text" 
+                      inputMode="numeric" 
+                      pattern="[0-9]*" 
+                      value={discountPercentage} 
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "" || /^\d+$/.test(val)) {
+                          setDiscountPercentage(val === "" ? "" : Math.min(100, parseInt(val)));
+                        }
+                      }} 
+                      onBlur={() => {
+                        if (discountPercentage === "" || Number(discountPercentage) < 0) setDiscountPercentage(0);
+                      }}
+                      className="h-8 text-xs bg-zinc-950 border-zinc-700 text-center font-bold" 
+                    />
                   </div>
                   <div className="space-y-1 col-span-2">
                     <Label className="text-[10px] text-zinc-400">Keterangan Diskon</Label>
-                    <Input type="text" placeholder="Misal: Promo Tahunan" value={discountDesc} onChange={(e) => setDiscountDesc(e.target.value)} disabled={discountPercentage <= 0} className="h-8 text-xs bg-zinc-950 border-zinc-700" />
+                    <Input type="text" placeholder="Misal: Promo Tahunan" value={discountDesc} onChange={(e) => setDiscountDesc(e.target.value)} disabled={Number(discountPercentage) <= 0} className="h-8 text-xs bg-zinc-950 border-zinc-700" />
                   </div>
                 </div>
                 <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-800">
@@ -605,7 +723,7 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
                     <span>Subtotal:</span>
                     <span>{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(subTotal)}</span>
                   </div>
-                  {discountPercentage > 0 && (
+                  {Number(discountPercentage) > 0 && (
                     <div className="flex justify-between items-center text-sm text-amber-400 mb-1">
                       <span>Diskon ({discountPercentage}%):</span>
                       <span>-{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(discountAmount)}</span>

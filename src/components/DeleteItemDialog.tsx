@@ -25,12 +25,13 @@ export function DeleteItemDialog({ item }: DeleteItemDialogProps) {
   const [mode, setMode] = useState<"selection" | "partial" | "full">("selection")
   const [isDummyUser, setIsDummyUser] = useState(false)
   const [showDemoWarning, setShowDemoWarning] = useState(false)
-  const [amount, setAmount] = useState<number>(1)
+  const [amount, setAmount] = useState<number | "">(1)
 
   function handleOpen(isOpen: boolean) {
     setOpen(isOpen)
     if (isOpen) {
       setMode("selection") // Selalu kembali ke menu awal tiap dibuka
+      setAmount(1)
       supabase.auth.getUser().then(({ data }) => {
         setIsDummyUser(isDemoEmail(data.user?.email))
       })
@@ -42,8 +43,9 @@ export function DeleteItemDialog({ item }: DeleteItemDialogProps) {
       setShowDemoWarning(true)
       return
     }
-    if (amount > 0 && amount <= item.quantity) {
-      await reduceItemQuantity(item.id, amount)
+    const safeAmount = Number(amount) || 1
+    if (safeAmount > 0 && safeAmount <= item.quantity) {
+      await reduceItemQuantity(item.id, safeAmount)
       setOpen(false)
     }
   }
@@ -96,12 +98,21 @@ export function DeleteItemDialog({ item }: DeleteItemDialogProps) {
             <div className="space-y-2">
               <Label>Jumlah yang dikurangi (Maks: {item.quantity})</Label>
               <Input
-                type="number"
-                min="1"
-                max={item.quantity}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 value={amount}
-                onChange={(e) => setAmount(parseInt(e.target.value) || 0)}
-                className="bg-zinc-900 border-zinc-800"
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === "" || /^\d+$/.test(val)) {
+                    setAmount(val === "" ? "" : Math.min(item.quantity, parseInt(val)));
+                  }
+                }}
+                onBlur={() => {
+                  if (amount === "" || Number(amount) < 1) setAmount(1);
+                }}
+                className="bg-zinc-900 border-zinc-800 text-center font-bold"
               />
             </div>
             {/* Ganti bagian div flex ini */}

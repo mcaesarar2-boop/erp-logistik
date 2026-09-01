@@ -34,10 +34,10 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
   const [open, setOpen] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [discountPercentage, setDiscountPercentage] = useState<number>(0)
+  const [discountPercentage, setDiscountPercentage] = useState<number | "">(0)
   const [discountDesc, setDiscountDesc] = useState<string>("")
   const [eventName, setEventName] = useState<string>("")
-  const [rentalDays, setRentalDays] = useState<number>(1)
+  const [rentalDays, setRentalDays] = useState<number | "">(1)
   const [cart, setCart] = useState<any[]>([])
 
   const [isAdmin, setIsAdmin] = useState(false)
@@ -76,8 +76,8 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
     }
   }, [open, pkg, items]);
 
-  const updateQty = (id: string, newQty: number) => {
-    setCart(cart.map(c => c.id === id ? { ...c, qty: Math.max(1, newQty) } : c))
+  const updateQty = (id: string, newQty: any) => {
+    setCart(cart.map(c => c.id === id ? { ...c, qty: newQty === "" ? "" : Math.max(1, parseInt(newQty) || 0) } : c))
   }
 
   const updateFootnote = (id: string, footnote: string) => {
@@ -98,19 +98,23 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
       unavailableReason = `Barang "${pItem.realName || pItem.name}" sudah dihapus dari sistem.`;
       break;
     }
-    if (realItem.quantity < pItem.qty) {
+    const itemQty = Number(pItem.qty) || 1;
+    if (realItem.quantity < itemQty) {
       isAvailable = false;
-      unavailableReason = `Stok "${realItem.name}" tidak cukup (Sisa: ${realItem.quantity}, Butuh: ${pItem.qty}).`;
+      unavailableReason = `Stok "${realItem.name}" tidak cukup (Sisa: ${realItem.quantity}, Butuh: ${itemQty}).`;
       break;
     }
   }
 
+  const safeRentalDays = Number(rentalDays) || 1;
+  const safeDiscountPercentage = Number(discountPercentage) || 0;
+
   const subTotal = cart.reduce((acc: number, pItem: any) => {
     const rentPrice = ((pItem.price || 0) * (pItem.rentPercentage || 0)) / 100;
-    return acc + (rentPrice * pItem.qty * rentalDays);
+    return acc + (rentPrice * (Number(pItem.qty) || 1) * safeRentalDays);
   }, 0);
 
-  const discountAmount = subTotal * (discountPercentage / 100);
+  const discountAmount = subTotal * (safeDiscountPercentage / 100);
   const grandTotal = subTotal - discountAmount;
 
   async function handleSubmit(formData: FormData) {
@@ -122,8 +126,7 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
     setErrorMsg(null)
     setIsSubmitting(true)
     
-    // Buat format payload yang sesuai untuk dirental
-    formData.append("payload", JSON.stringify(cart.map((c: any) => ({ id: c.id, qty: c.qty }))))
+    formData.append("payload", JSON.stringify(cart.map((c: any) => ({ id: c.id, qty: Number(c.qty) || 1 }))))
     const result = await addBulkRental(formData)
     
     if (result?.success === false) {
@@ -132,21 +135,22 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
       return
     }
 
-    // Tambahkan pencatatan riwayat (history)
     const historyFormData = new FormData()
     historyFormData.append("type", "INVOICE_RENTAL")
     historyFormData.append("date", new Date().toISOString().split('T')[0])
     
-    const totalQty = cart.reduce((acc: number, i: any) => acc + i.qty, 0)
+    const safeDays = Number(rentalDays) || 1
+    const safeDisc = Number(discountPercentage) || 0
+    const totalQty = cart.reduce((acc: number, i: any) => acc + (Number(i.qty) || 1), 0)
     let historyDesc = `Rental Paket: ${pkg.name} (${totalQty} Unit Aset)`
     if (eventName.trim() !== "") {
       historyDesc = `Event: ${eventName.trim()} | ` + historyDesc
     }
-    if (rentalDays > 1) {
-      historyDesc += ` - ${rentalDays} Hari`
+    if (safeDays > 1) {
+      historyDesc += ` - ${safeDays} Hari`
     }
-    if (discountPercentage > 0) {
-      historyDesc += ` - Diskon ${discountPercentage}%`
+    if (safeDisc > 0) {
+      historyDesc += ` - Diskon ${safeDisc}%`
       if (discountDesc.trim() !== "") {
         historyDesc += ` (${discountDesc.trim()})`
       }
@@ -160,10 +164,10 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
         id: pItem.id,
         name: pItem.name,
         code: pItem.code,
-        qty: pItem.qty,
+        qty: Number(pItem.qty) || 1,
         returnedQty: 0,
         imageUrl: realItem?.imageUrl || pItem.imageUrl || null,
-        price: rentPricePerItem * rentalDays * (1 - (discountPercentage / 100)),
+        price: rentPricePerItem * safeDays * (1 - (safeDisc / 100)),
         footnote: pItem.footnote
       }
     })
@@ -177,31 +181,35 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
   if (!isAdmin && !isDummyUser) return null;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) setErrorMsg(null); }}>
       <DialogTrigger asChild>
-        <button className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center shadow-md hover:shadow-emerald-900/50">
-          <ShoppingCart className="w-4 h-4 mr-2" /> Sewa
-        </button>
+        <Button className="w-full bg-emerald-600 border border-emerald-500 text-white hover:bg-emerald-500 shadow-md font-semibold text-xs flex items-center justify-center gap-1.5 h-8">
+          <ShoppingCart className="w-3.5 h-3.5" />
+          <span>Sewa Paket Langsung</span>
+        </Button>
       </DialogTrigger>
-      <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-50 flex flex-col max-h-[90vh] overflow-hidden">
-        <DialogHeader><DialogTitle>Konfirmasi Sewa Paket</DialogTitle></DialogHeader>
+      <DialogContent aria-describedby={undefined} className="bg-zinc-950 border-zinc-800 text-zinc-50 max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+        <DialogHeader className="shrink-0 border-b border-zinc-800 pb-4">
+          <DialogTitle className="flex items-center gap-2">
+            <span>Sewa Paket:</span>
+            <span className="text-emerald-400 font-bold">{pkg.name}</span>
+          </DialogTitle>
+        </DialogHeader>
         
-        {errorMsg && <div className="bg-red-950/50 border border-red-900 text-red-400 text-sm p-3 rounded-md flex items-center gap-2"><span className="font-bold">Gagal:</span> {errorMsg}</div>}
-        {!isAvailable && <div className="bg-red-950/50 border border-red-900 text-red-400 text-sm p-3 rounded-md flex items-start gap-2"><AlertCircle className="w-4 h-4 shrink-0 mt-0.5" /><span><strong className="block mb-0.5">Tidak bisa disewa:</strong> {unavailableReason}</span></div>}
+        {errorMsg && <div className="bg-red-950/50 border border-red-900 text-red-400 text-sm p-3 rounded-md flex items-center gap-2 shrink-0 my-2"><span className="font-bold">Gagal:</span> {errorMsg}</div>}
+        {!isAvailable && <div className="bg-red-950/50 border border-red-900 text-red-400 text-xs p-3 rounded-md flex items-center gap-2 shrink-0 mb-2"><AlertCircle className="w-4 h-4 shrink-0" /><span>{unavailableReason}</span></div>}
 
-        <div className="flex-1 overflow-y-auto pr-2 space-y-4 pt-2">
+        <div className="flex-1 overflow-y-auto space-y-4 pr-1 py-2">
           <div className="space-y-2">
-            <span className="text-sm font-medium text-zinc-300">Nama Event / Acara (Opsional)</span>
-            <Input type="text" placeholder="Misal: Pensi SMA 1" value={eventName} onChange={(e) => setEventName(e.target.value)} className="bg-zinc-900 border-zinc-800" />
+            <Label>Nama Event / Acara (Opsional)</Label>
+            <Input type="text" placeholder="Misal: Konser Musik Akbar" value={eventName} onChange={(e) => setEventName(e.target.value)} className="bg-zinc-900 border-zinc-800" />
           </div>
 
-          <div className="bg-zinc-900/50 p-4 rounded-xl border border-zinc-800">
-            <h3 className="font-bold text-lg text-blue-400 mb-1">{pkg.name}</h3>
+          <div>
             <p className="text-sm text-zinc-400 mb-4">Rincian aset yang akan dikeluarkan dari gudang:</p>
             <div className="space-y-4">
               {groupItemsByPrimaryCategory(cart, items).map(group => (
                 <div key={group.categoryName} className="w-full">
-                  {/* Section Header Kategori Utama */}
                   <div className="w-full flex items-center gap-2 pb-1.5 mb-2.5 border-b border-zinc-800">
                     <span className="w-1.5 h-3.5 bg-blue-500 rounded-full shrink-0"></span>
                     <h4 className="text-xs font-bold text-zinc-200 uppercase tracking-wider">
@@ -214,7 +222,8 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
 
                   <div className="flex flex-col gap-2.5">
                     {group.items.map((pItem: any, idx: number) => {
-                      const isEnough = pItem.quantity >= pItem.qty;
+                      const itemQty = Number(pItem.qty) || 1;
+                      const isEnough = pItem.quantity >= itemQty;
                       const rentPricePerItem = ((pItem.price || 0) * (pItem.rentPercentage || 0)) / 100;
                       const realItem = items.find(i => i.id === pItem.id || i.code === pItem.code);
                       return (
@@ -233,11 +242,27 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-2">
                                 <Label className="text-xs shrink-0">Qty:</Label>
-                                <Input type="number" min="1" max={pItem.quantity} value={pItem.qty} onChange={(e) => updateQty(pItem.id, parseInt(e.target.value)||1)} className="w-16 sm:w-20 h-8 text-xs bg-zinc-900 border-zinc-700 text-center font-bold" />
+                                <Input 
+                                  type="text" 
+                                  inputMode="numeric" 
+                                  pattern="[0-9]*" 
+                                  value={pItem.qty} 
+                                  onFocus={(e) => e.target.select()}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val === "" || /^\d+$/.test(val)) {
+                                      updateQty(pItem.id, val === "" ? "" : parseInt(val));
+                                    }
+                                  }} 
+                                  onBlur={() => {
+                                    if (pItem.qty === "" || Number(pItem.qty) < 1) updateQty(pItem.id, 1);
+                                  }}
+                                  className="w-16 sm:w-20 h-8 text-xs bg-zinc-900 border-zinc-700 text-center font-bold" 
+                                />
                               </div>
                               <div className="text-right shrink-0">
                                 <p className="text-[10px] text-zinc-500">Nilai Sewa</p>
-                                <p className="text-xs sm:text-sm font-bold text-emerald-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(rentPricePerItem * pItem.qty * rentalDays)}</p>
+                                <p className="text-xs sm:text-sm font-bold text-emerald-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(rentPricePerItem * (Number(pItem.qty) || 1) * safeRentalDays)}</p>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -258,7 +283,23 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
           <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-4 mb-4 flex flex-col gap-2">
             <div className="flex justify-between items-center">
               <Label className="text-zinc-300">Durasi Rental (Hari)</Label>
-              <Input type="number" min="1" value={rentalDays} onChange={(e) => setRentalDays(Math.max(1, parseInt(e.target.value) || 1))} className="w-20 h-8 text-right text-xs bg-zinc-900 border-zinc-700" />
+              <Input 
+                type="text" 
+                inputMode="numeric" 
+                pattern="[0-9]*" 
+                value={rentalDays} 
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === "" || /^\d+$/.test(val)) {
+                    setRentalDays(val === "" ? "" : parseInt(val));
+                  }
+                }} 
+                onBlur={() => {
+                  if (rentalDays === "" || Number(rentalDays) < 1) setRentalDays(1);
+                }}
+                className="w-20 h-8 text-center font-bold text-xs bg-zinc-900 border-zinc-700" 
+              />
             </div>
             <div className="flex justify-between items-center text-sm text-zinc-400">
               <span>Subtotal:</span>
@@ -266,9 +307,25 @@ export function RentPackageDialog({ pkg, items }: RentPackageDialogProps) {
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-zinc-300">Diskon Keseluruhan (%)</span>
-              <Input type="number" min="0" max="100" value={discountPercentage} onChange={(e) => setDiscountPercentage(parseFloat(e.target.value) || 0)} className="w-20 h-8 text-right text-xs bg-zinc-900 border-zinc-700" />
+              <Input 
+                type="text" 
+                inputMode="numeric" 
+                pattern="[0-9]*" 
+                value={discountPercentage} 
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === "" || /^\d+$/.test(val)) {
+                    setDiscountPercentage(val === "" ? "" : Math.min(100, parseInt(val)));
+                  }
+                }} 
+                onBlur={() => {
+                  if (discountPercentage === "" || Number(discountPercentage) < 0) setDiscountPercentage(0);
+                }}
+                className="w-20 h-8 text-center font-bold text-xs bg-zinc-900 border-zinc-700" 
+              />
             </div>
-            {discountPercentage > 0 && (
+            {Number(discountPercentage) > 0 && (
               <>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-zinc-300">Keterangan Diskon</span>
