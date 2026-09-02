@@ -53,10 +53,28 @@ model History {
 
 // --- TABEL TEMPLATE PAKET RENTAL ---
 model PackageTemplate {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  payload     String   @db.Text // Menyimpan data isi paket berbentuk format JSON
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String   @id @default(cuid())
+  name          String
+  description   String?
+  payload       String   @db.Text // Menyimpan data isi paket berbentuk format JSON
+  kategoriUtama String?  // Kategori utama tunggal (misal: 'Audio', 'Lighting', 'Stage')
+  labelGrade    String[] @default([]) // Multi-label / grade (misal: ['Concert', 'Grade A', 'Outdoor'])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// --- TABEL MASTER KATEGORI UTAMA PAKET ---
+model MasterCategory {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// --- TABEL MASTER LABEL / GRADE PAKET ---
+model MasterLabel {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

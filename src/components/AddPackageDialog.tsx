@@ -7,11 +7,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { createPackageTemplate } from "@/app/actions"
 import { supabase } from "@/lib/supabase"
-import { Trash2, Search, PackagePlus } from "lucide-react"
+import { Trash2, Search, PackagePlus, X, Tag, Plus } from "lucide-react"
 import { DemoRestrictionDialog } from "@/components/DemoRestrictionDialog"
 import { isAdminEmail, isDemoEmail, DEMO_MESSAGES } from "@/lib/permissions"
 import { ItemThumbnail } from "@/components/ItemThumbnail"
 import { groupItemsByPrimaryCategory } from "@/lib/grouping"
+
+const DEFAULT_CATEGORIES = ['Audio', 'Lighting', 'Video', 'Stage', 'Backline'];
+const SUGGESTED_LABELS = ['Concert', 'Festival', 'Corporate', 'Grade A', 'Grade B', 'Outdoor', 'Indoor', 'Wedding'];
 
 interface AddPackageDialogProps {
   items: {
@@ -25,9 +28,11 @@ interface AddPackageDialogProps {
     price?: number | null
     rentPercentage?: number | null
   }[]
+  masterCategories?: { id: string; name: string }[]
+  masterLabels?: { id: string; name: string }[]
 }
 
-export function AddPackageDialog({ items }: AddPackageDialogProps) {
+export function AddPackageDialog({ items, masterCategories = [], masterLabels = [] }: AddPackageDialogProps) {
   const [open, setOpen] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   
@@ -36,6 +41,12 @@ export function AddPackageDialog({ items }: AddPackageDialogProps) {
   const [cart, setCart] = useState<any[]>([])
   const [packageName, setPackageName] = useState("")
   const [packageDesc, setPackageDesc] = useState("")
+  const [kategoriUtama, setKategoriUtama] = useState("")
+  const [labelGrade, setLabelGrade] = useState<string[]>([])
+  const [tagInput, setTagInput] = useState("")
+
+  const categoriesList = masterCategories.length > 0 ? masterCategories.map(c => c.name) : DEFAULT_CATEGORIES;
+  const suggestedLabelsList = masterLabels.length > 0 ? masterLabels.map(l => l.name) : SUGGESTED_LABELS;
 
   const [isDummyUser, setIsDummyUser] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
@@ -49,6 +60,19 @@ export function AddPackageDialog({ items }: AddPackageDialogProps) {
       }
     })
   }, [])
+
+  const handleAddLabel = (val?: string) => {
+    const text = (val ?? tagInput).trim()
+    if (!text) return
+    if (!labelGrade.includes(text)) {
+      setLabelGrade([...labelGrade, text])
+    }
+    if (!val) setTagInput("")
+  }
+
+  const handleRemoveLabel = (labelToRemove: string) => {
+    setLabelGrade(labelGrade.filter(l => l !== labelToRemove))
+  }
 
   const filteredItems = useMemo(() => {
     if (!searchQuery) return [];
@@ -101,6 +125,8 @@ export function AddPackageDialog({ items }: AddPackageDialogProps) {
       return
     }
     
+    formData.append("kategoriUtama", kategoriUtama)
+    formData.append("labelGrade", JSON.stringify(labelGrade))
     formData.append("payload", JSON.stringify(cart.map(c => ({ id: c.id, qty: Number(c.qty) || 1, name: c.name, code: c.code, price: c.price, rentPercentage: c.rentPercentage, footnote: c.footnote }))))
     const result = await createPackageTemplate(formData)
     
@@ -114,13 +140,27 @@ export function AddPackageDialog({ items }: AddPackageDialogProps) {
     setCart([]) 
     setPackageName("")
     setPackageDesc("")
+    setKategoriUtama("")
+    setLabelGrade([])
+    setTagInput("")
   }
 
   if (!isAdmin && !isDummyUser) return null;
 
   return (
     <>
-      <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) { setErrorMsg(null); setCart([]); setPackageName(""); setPackageDesc(""); }}}>
+      <Dialog open={open} onOpenChange={(isOpen) => { 
+        setOpen(isOpen); 
+        if (!isOpen) { 
+          setErrorMsg(null); 
+          setCart([]); 
+          setPackageName(""); 
+          setPackageDesc(""); 
+          setKategoriUtama("");
+          setLabelGrade([]);
+          setTagInput("");
+        }
+      }}>
         <DialogTrigger asChild>
           <Button className="w-full sm:w-auto shrink-0 bg-blue-950/50 border border-blue-900 text-blue-400 hover:bg-blue-900 hover:text-blue-50">
             <PackagePlus className="w-4 h-4 mr-2" /> Bikin Paket
@@ -138,13 +178,107 @@ export function AddPackageDialog({ items }: AddPackageDialogProps) {
 
           <form action={handleSubmit} className="flex flex-col gap-4 pt-2 flex-1 overflow-hidden">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 shrink-0">
-              <div className="space-y-2">
-                <Label>Nama Paket</Label>
-                <Input name="name" placeholder="Misal: Paket Panggung A" className="bg-zinc-900 border-zinc-800" value={packageName} onChange={e => setPackageName(e.target.value)} required />
+              {/* Kolom Kiri: Nama Paket & Deskripsi */}
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label>Nama Paket</Label>
+                  <Input name="name" placeholder="Misal: Paket Panggung A" className="bg-zinc-900 border-zinc-800" value={packageName} onChange={e => setPackageName(e.target.value)} required />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Deskripsi (Opsional)</Label>
+                  <Input name="description" placeholder="Keterangan paket..." className="bg-zinc-900 border-zinc-800" value={packageDesc} onChange={e => setPackageDesc(e.target.value)} />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>Deskripsi (Opsional)</Label>
-                <Input name="description" placeholder="Keterangan paket..." className="bg-zinc-900 border-zinc-800" value={packageDesc} onChange={e => setPackageDesc(e.target.value)} />
+
+              {/* Kolom Kanan: Kategori Utama & Label/Grade */}
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="kategoriUtama">Kategori Utama</Label>
+                  <select
+                    id="kategoriUtama"
+                    name="kategoriUtama"
+                    value={kategoriUtama}
+                    onChange={e => setKategoriUtama(e.target.value)}
+                    className="flex h-9 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1 text-sm shadow-sm transition-colors text-zinc-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
+                  >
+                    <option value="">-- Pilih Kategori Utama (Opsional) --</option>
+                    {categoriesList.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label>Label / Grade</Label>
+                    <span className="text-[10px] text-zinc-500">Tekan Enter untuk menambah</span>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <Input
+                      placeholder="Misal: Concert, Grade A..."
+                      value={tagInput}
+                      onChange={e => setTagInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddLabel();
+                        }
+                      }}
+                      className="bg-zinc-900 border-zinc-800 text-xs h-8"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleAddLabel()}
+                      className="h-8 px-2.5 bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700 shrink-0 text-xs"
+                    >
+                      <Plus className="w-3.5 h-3.5 mr-1" /> Tambah
+                    </Button>
+                  </div>
+
+                  {/* Preset rekomendasi */}
+                  <div className="flex flex-wrap gap-1 items-center pt-0.5">
+                    {suggestedLabelsList.map(preset => {
+                      const isSelected = labelGrade.includes(preset);
+                      return (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => isSelected ? handleRemoveLabel(preset) : handleAddLabel(preset)}
+                          className={`text-[10px] px-1.5 py-0.5 rounded border transition-all ${
+                            isSelected
+                              ? "bg-blue-600/30 border-blue-500 text-blue-300 font-medium"
+                              : "bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+                          }`}
+                        >
+                          {isSelected ? `✓ ${preset}` : `+ ${preset}`}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Tag aktif */}
+                  {labelGrade.length > 0 && (
+                    <div className="flex flex-wrap gap-1 pt-1 max-h-16 overflow-y-auto">
+                      {labelGrade.map(lbl => (
+                        <span
+                          key={lbl}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-blue-950/70 border border-blue-800 text-blue-300"
+                        >
+                          {lbl}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveLabel(lbl)}
+                            className="hover:text-red-400 transition-colors"
+                          >
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 

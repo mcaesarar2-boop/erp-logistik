@@ -7,7 +7,7 @@ import { DeleteItemDialog } from "@/components/DeleteItemDialog";
 import { AddCategoryDialog } from "@/components/AddCategoryDialog";
 import { EditCategoryDialog } from "@/components/EditCategoryDialog"; 
 import { DeleteCategoryDialog } from "@/components/DeleteCategoryDialog";
-import { Search, ArrowUpDown, History as HistoryIcon, Calendar, Trash2, Pencil, Loader2, Printer, PackageSearch, Eye, ShoppingCart, PlusCircle, Copy, Check, RefreshCw, Plus } from "lucide-react";
+import { Search, ArrowUpDown, History as HistoryIcon, Calendar, Trash2, Pencil, Loader2, Printer, PackageSearch, Eye, ShoppingCart, PlusCircle, Copy, Check, RefreshCw, Plus, Filter, Tag, X, ChevronDown } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger, DialogHeader } from "@/components/ui/dialog";
 import { RentalInvoiceDialog } from "@/components/RentalInvoiceDialog";
@@ -17,6 +17,7 @@ import { EditPackageDialog } from "@/components/EditPackageDialog";
 import { PrintPackageDialog } from "@/components/PrintPackageDialog";
 import { updateHistory, deleteHistory, deletePackageTemplate, batchRegenerateCodes, syncActiveEvents } from "@/app/actions";
 import { AddToPackageDialog } from "@/components/AddToPackageDialog";
+import { ManagePackageMasterDialog } from "@/components/ManagePackageMasterDialog";
 import { DemoRestrictionDialog } from "@/components/DemoRestrictionDialog";
 import { isAdminEmail, isDemoEmail, DEMO_MESSAGES } from "@/lib/permissions";
 import { ItemThumbnail } from "@/components/ItemThumbnail";
@@ -70,6 +71,10 @@ type PackageTemplate = {
   name: string;
   description: string | null;
   payload: string;
+  kategoriUtama?: string | null;
+  labelGrade?: string[];
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
 };
 
 interface MultiLayerDashboardProps {
@@ -77,9 +82,11 @@ interface MultiLayerDashboardProps {
   categories: Category[];
   histories: History[];
   packages: PackageTemplate[];
+  masterCategories?: { id: string; name: string }[];
+  masterLabels?: { id: string; name: string }[];
 }
 
-export default function MultiLayerDashboard({ items, categories, histories, packages }: MultiLayerDashboardProps) {
+export default function MultiLayerDashboard({ items, categories, histories, packages, masterCategories = [], masterLabels = [] }: MultiLayerDashboardProps) {
   const router = useRouter();
   const [activeLayer, setActiveLayer] = useState<'home' | 'all_items' | 'rented' | 'maintenance' | 'history' | 'packages'>('home');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
@@ -104,6 +111,75 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
   const [copiedEventId, setCopiedEventId] = useState<string | null>(null);
   const [copiedPackageId, setCopiedPackageId] = useState<string | null>(null);
   
+  // State untuk Filtering & Kategorisasi Katalog Paket
+  const [selectedPkgCategory, setSelectedPkgCategory] = useState<string>('ALL');
+  const [selectedPkgLabels, setSelectedPkgLabels] = useState<string[]>([]);
+  const [pkgSearchQuery, setPkgSearchQuery] = useState<string>('');
+  const [isLabelDropdownOpen, setIsLabelDropdownOpen] = useState(false);
+
+  // Daftar Kategori Utama untuk Paket (Dari Master Data + Kategori Eksisting)
+  const packageCategoryTabs = useMemo(() => {
+    const catsFromMaster = masterCategories.map(c => c.name);
+    const fallbackCats = ['Audio', 'Lighting', 'Video', 'Stage', 'Backline'];
+    const baseCats = catsFromMaster.length > 0 ? catsFromMaster : fallbackCats;
+    const customCats = packages
+      .map(p => p.kategoriUtama?.trim())
+      .filter((cat): cat is string => Boolean(cat && !baseCats.some(bc => bc.toLowerCase() === cat.toLowerCase())));
+    const uniqueCustom = Array.from(new Set(customCats));
+    return ['ALL', ...baseCats, ...uniqueCustom];
+  }, [packages, masterCategories]);
+
+  // Daftar Semua Label/Grade yang ada pada data paket + dari Master Data
+  const allAvailableLabels = useMemo(() => {
+    const set = new Set<string>();
+    if (masterLabels.length > 0) {
+      masterLabels.forEach(l => set.add(l.name));
+    } else {
+      ['Concert', 'Festival', 'Corporate', 'Grade A', 'Grade B', 'Outdoor', 'Indoor', 'Wedding'].forEach(l => set.add(l));
+    }
+    packages.forEach(p => {
+      if (Array.isArray(p.labelGrade)) {
+        p.labelGrade.forEach(l => {
+          if (l && l.trim()) set.add(l.trim());
+        });
+      }
+    });
+    return Array.from(set);
+  }, [packages, masterLabels]);
+
+  // Hasil Filter Paket Rental
+  const filteredPackages = useMemo(() => {
+    return packages.filter(pkg => {
+      // 1. Filter Kategori Utama (Pills/Tabs)
+      if (selectedPkgCategory !== 'ALL') {
+        if (!pkg.kategoriUtama || pkg.kategoriUtama.toLowerCase() !== selectedPkgCategory.toLowerCase()) {
+          return false;
+        }
+      }
+
+      // 2. Filter Label / Grade (Multi-select Checkbox)
+      if (selectedPkgLabels.length > 0) {
+        const pkgLabels = Array.isArray(pkg.labelGrade) ? pkg.labelGrade : [];
+        const hasMatch = selectedPkgLabels.some(filterLabel =>
+          pkgLabels.some(l => l.toLowerCase() === filterLabel.toLowerCase())
+        );
+        if (!hasMatch) return false;
+      }
+
+      // 3. Filter Pencarian Cepat
+      if (pkgSearchQuery.trim()) {
+        const q = pkgSearchQuery.toLowerCase();
+        const matchName = pkg.name.toLowerCase().includes(q);
+        const matchDesc = (pkg.description || '').toLowerCase().includes(q);
+        const matchCat = (pkg.kategoriUtama || '').toLowerCase().includes(q);
+        const matchLabel = (pkg.labelGrade || []).some(l => l.toLowerCase().includes(q));
+        if (!matchName && !matchDesc && !matchCat && !matchLabel) return false;
+      }
+
+      return true;
+    });
+  }, [packages, selectedPkgCategory, selectedPkgLabels, pkgSearchQuery]);
+
   // State untuk Sinkronisasi Data On Rented
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncToastMsg, setSyncToastMsg] = useState(false);
@@ -577,14 +653,233 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
       {/* Layer 2.6: Katalog Paket */}
       {activeLayer === 'packages' && (
         <div className="space-y-6">
-          <div className="flex items-center gap-3 border-b border-zinc-800 pb-4">
-            <PackageSearch className="w-6 h-6 text-zinc-400" />
-            <h2 className="text-xl font-bold text-zinc-100">Katalog Paket Rental</h2>
+          {/* Header Katalog Paket */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
+            <div className="flex items-center gap-3">
+              <PackageSearch className="w-6 h-6 text-zinc-400" />
+              <div>
+                <h2 className="text-xl font-bold text-zinc-100">Katalog Paket Rental</h2>
+                <p className="text-xs text-zinc-400">Kelola dan telusuri template paket siap sewa berdasarkan kategori & grade.</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+              <ManagePackageMasterDialog 
+                masterCategories={masterCategories} 
+                masterLabels={masterLabels} 
+              />
+              <div className="text-xs text-zinc-400 bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-lg flex items-center gap-2 shadow-sm">
+                <span>Total: <strong className="text-zinc-200">{packages.length}</strong> paket</span>
+                {(selectedPkgCategory !== 'ALL' || selectedPkgLabels.length > 0 || pkgSearchQuery) && (
+                  <>
+                    <span className="text-zinc-600">|</span>
+                    <span className="text-blue-400 font-medium">Filter: <strong>{filteredPackages.length}</strong> hasil</span>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
 
-          {packages.length > 0 ? (
+          {/* Filter Bar Section */}
+          <div className="bg-zinc-900/40 border border-zinc-800 rounded-xl p-4 space-y-3.5">
+            {/* 1. Pill Buttons / Tabs untuk Kategori Utama */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Tag className="w-3.5 h-3.5 text-blue-400" /> Kategori Utama:
+                </span>
+                {(selectedPkgCategory !== 'ALL' || selectedPkgLabels.length > 0 || pkgSearchQuery) && (
+                  <button
+                    onClick={() => {
+                      setSelectedPkgCategory('ALL');
+                      setSelectedPkgLabels([]);
+                      setPkgSearchQuery('');
+                    }}
+                    className="text-xs text-zinc-400 hover:text-red-400 transition-colors flex items-center gap-1"
+                  >
+                    <X className="w-3 h-3" /> Reset Filter
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+                {packageCategoryTabs.map((cat) => {
+                  const isActive = selectedPkgCategory.toLowerCase() === cat.toLowerCase();
+                  const count = cat === 'ALL'
+                    ? packages.length
+                    : packages.filter(p => (p.kategoriUtama || '').toLowerCase() === cat.toLowerCase()).length;
+
+                  return (
+                    <button
+                      key={cat}
+                      onClick={() => setSelectedPkgCategory(cat)}
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap flex items-center gap-1.5 shrink-0 cursor-pointer ${
+                        isActive
+                          ? "bg-blue-600 text-white shadow-md shadow-blue-900/40 font-semibold ring-1 ring-blue-400/50"
+                          : "bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                      }`}
+                    >
+                      <span>{cat === 'ALL' ? 'Semua Kategori' : cat}</span>
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                        isActive ? "bg-blue-700/90 text-blue-100" : "bg-zinc-800 text-zinc-500"
+                      }`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 2. Cross-Filter Label/Grade & Quick Search */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-zinc-800/60">
+              <div className="flex flex-wrap items-center gap-2 relative">
+                {/* Dropdown Multi-Select Checkbox Filter Label / Grade */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setIsLabelDropdownOpen(!isLabelDropdownOpen)}
+                    className={`px-3 py-1.5 rounded-lg border text-xs font-medium flex items-center gap-2 transition-all cursor-pointer ${
+                      selectedPkgLabels.length > 0
+                        ? "bg-blue-950/70 border-blue-600 text-blue-300 shadow-sm shadow-blue-950"
+                        : "bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+                    }`}
+                  >
+                    <Filter className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Filter Label / Grade</span>
+                    {selectedPkgLabels.length > 0 && (
+                      <span className="bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full leading-none">
+                        {selectedPkgLabels.length}
+                      </span>
+                    )}
+                    <ChevronDown className={`w-3.5 h-3.5 text-zinc-500 transition-transform ${isLabelDropdownOpen ? "rotate-180" : ""}`} />
+                  </button>
+
+                  {/* Dropdown Menu Checkbox */}
+                  {isLabelDropdownOpen && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => setIsLabelDropdownOpen(false)}
+                      />
+                      <div className="absolute top-full left-0 mt-1.5 w-64 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl p-3 z-50 space-y-2.5 animate-in fade-in zoom-in-95 duration-100">
+                        <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+                          <span className="text-xs font-bold text-zinc-200">Cross-Filter Label</span>
+                          {selectedPkgLabels.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedPkgLabels([])}
+                              className="text-[11px] text-zinc-400 hover:text-red-400 cursor-pointer"
+                            >
+                              Hapus Pilihan
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="max-h-56 overflow-y-auto space-y-1 pr-1">
+                          {allAvailableLabels.length > 0 ? (
+                            allAvailableLabels.map((lbl) => {
+                              const isChecked = selectedPkgLabels.includes(lbl);
+                              const countInCat = packages.filter(p => {
+                                const matchCat = selectedPkgCategory === 'ALL' || (p.kategoriUtama || '').toLowerCase() === selectedPkgCategory.toLowerCase();
+                                const matchLbl = Array.isArray(p.labelGrade) && p.labelGrade.some(l => l.toLowerCase() === lbl.toLowerCase());
+                                return matchCat && matchLbl;
+                              }).length;
+
+                              return (
+                                <label
+                                  key={lbl}
+                                  className="flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-zinc-800 cursor-pointer text-xs transition-colors"
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={() => {
+                                        if (isChecked) {
+                                          setSelectedPkgLabels(selectedPkgLabels.filter(l => l !== lbl));
+                                        } else {
+                                          setSelectedPkgLabels([...selectedPkgLabels, lbl]);
+                                        }
+                                      }}
+                                      className="rounded border-zinc-700 bg-zinc-800 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5 accent-blue-600 cursor-pointer"
+                                    />
+                                    <span className={`truncate ${isChecked ? "text-blue-300 font-semibold" : "text-zinc-300"}`}>
+                                      {lbl}
+                                    </span>
+                                  </div>
+                                  <span className="text-[10px] text-zinc-500 shrink-0 ml-2">
+                                    {countInCat}
+                                  </span>
+                                </label>
+                              );
+                            })
+                          ) : (
+                            <div className="text-xs text-zinc-500 py-2 text-center">Belum ada label.</div>
+                          )}
+                        </div>
+
+                        <div className="pt-2 border-t border-zinc-800 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => setIsLabelDropdownOpen(false)}
+                            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-md transition-colors cursor-pointer"
+                          >
+                            Terapkan
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Badge Label Aktif */}
+                {selectedPkgLabels.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {selectedPkgLabels.map(lbl => (
+                      <span
+                        key={lbl}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-blue-950/80 border border-blue-700 text-blue-300 shadow-sm"
+                      >
+                        <span>{lbl}</span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPkgLabels(selectedPkgLabels.filter(l => l !== lbl))}
+                          className="hover:text-red-400 transition-colors cursor-pointer"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Input Pencarian Cepat */}
+              <div className="relative w-full sm:w-60">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                <input
+                  type="text"
+                  placeholder="Cari paket..."
+                  value={pkgSearchQuery}
+                  onChange={(e) => setPkgSearchQuery(e.target.value)}
+                  className="w-full pl-8 pr-7 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-blue-500 transition-colors"
+                />
+                {pkgSearchQuery && (
+                  <button
+                    onClick={() => setPkgSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 cursor-pointer"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Daftar Kartu Paket Rental */}
+          {filteredPackages.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {packages.map((pkg) => {
+              {filteredPackages.map((pkg) => {
                 const payloadData = pkg.payload ? JSON.parse(pkg.payload) : [];
                 
                 const totalPackageRent = payloadData.reduce((acc: number, pItem: any) => {
@@ -599,16 +894,50 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                   .filter((item: Item | undefined): item is Item => !!item);
 
                 return (
-                  <div key={pkg.id} className="bg-zinc-900/40 border border-zinc-800 rounded-xl p-5 shadow-sm flex flex-col relative group">
-                    <div className="flex justify-between items-start gap-4 mb-4">
+                  <div key={pkg.id} className="bg-zinc-900/40 border border-zinc-800 rounded-xl p-5 shadow-sm flex flex-col relative group hover:border-zinc-700/80 transition-colors">
+                    {/* Header Kartu: Nama, Badge Kategori & Labels, Tombol Aksi */}
+                    <div className="flex justify-between items-start gap-4 mb-3">
                       <div className="flex-1 min-w-0">
                         <h3 className="text-lg font-bold text-blue-400 mb-1 line-clamp-2">{pkg.name}</h3>
-                        <p className="text-xs text-zinc-500 line-clamp-1">{pkg.description || 'Tidak ada deskripsi paket.'}</p>
+
+                        {/* Barisan Badge Kategori Utama & Label Grade */}
+                        <div className="flex flex-wrap items-center gap-1.5 my-2">
+                          {/* Badge Kategori Utama (Solid mencolok) */}
+                          {pkg.kategoriUtama ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-blue-600 text-white shadow-sm shadow-blue-900/50 tracking-wide uppercase">
+                              {pkg.kategoriUtama}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-800/80 text-zinc-500 border border-zinc-700/40">
+                              Tanpa Kategori
+                            </span>
+                          )}
+
+                          {/* Badges Label / Grade (Badge kecil outline/pudar) */}
+                          {Array.isArray(pkg.labelGrade) && pkg.labelGrade.length > 0 && (
+                            pkg.labelGrade.map((lbl, idx) => (
+                              <span
+                                key={idx}
+                                className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-900 text-zinc-300 border border-zinc-700/60"
+                              >
+                                {lbl}
+                              </span>
+                            ))
+                          )}
+                        </div>
+
+                        <p className="text-xs text-zinc-500 line-clamp-2">{pkg.description || 'Tidak ada deskripsi paket.'}</p>
                       </div>
+
                       {(isAdmin || isDummyUser) && (
                         <div className="flex gap-2 shrink-0 md:opacity-0 opacity-100 group-hover:opacity-100 transition-opacity z-10">
-                          <EditPackageDialog pkg={pkg} items={items} />
-                          <button onClick={() => setDeletingPackage(pkg)} className="p-2 bg-red-950/50 hover:bg-red-900 text-red-400 rounded-md transition-colors shadow-sm" title="Hapus Paket"><Trash2 className="w-4 h-4" /></button>
+                          <EditPackageDialog 
+                            pkg={pkg} 
+                            items={items} 
+                            masterCategories={masterCategories} 
+                            masterLabels={masterLabels} 
+                          />
+                          <button onClick={() => setDeletingPackage(pkg)} className="p-2 bg-red-950/50 hover:bg-red-900 text-red-400 rounded-md transition-colors shadow-sm cursor-pointer" title="Hapus Paket"><Trash2 className="w-4 h-4" /></button>
                         </div>
                       )}
                     </div>
@@ -670,7 +999,7 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                         <div className="relative">
                           <button
                             onClick={() => handleCopyPackage(pkg)}
-                            className={`p-2 rounded-md transition-all shadow-sm ${
+                            className={`p-2 rounded-md transition-all shadow-sm cursor-pointer ${
                               copiedPackageId === pkg.id
                                 ? "bg-blue-950/80 border border-blue-700 text-blue-400"
                                 : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
@@ -688,7 +1017,7 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                         <PrintPackageDialog pkg={pkg} items={items} />
                         <button
                           onClick={() => setAddingToCartPkg(pkg)}
-                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-sm font-medium transition-colors flex items-center gap-2 shadow-sm"
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-sm font-medium transition-colors flex items-center gap-2 shadow-sm cursor-pointer"
                         >
                           <ShoppingCart className="w-4 h-4 shrink-0" />
                           <span className="hidden sm:inline">Ke Keranjang</span>
@@ -698,6 +1027,24 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                   </div>
                 );
               })}
+            </div>
+          ) : packages.length > 0 ? (
+            <div className="text-center py-16 text-zinc-400 bg-zinc-900/20 rounded-xl border border-zinc-800 p-8 space-y-3">
+              <Filter className="w-8 h-8 text-zinc-600 mx-auto" />
+              <h3 className="text-base font-semibold text-zinc-300">Tidak ada paket yang cocok</h3>
+              <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+                Tidak ada paket rental yang memenuhi kriteria filter kategori utama dan label yang Anda pilih.
+              </p>
+              <button
+                onClick={() => {
+                  setSelectedPkgCategory('ALL');
+                  setSelectedPkgLabels([]);
+                  setPkgSearchQuery('');
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-blue-400 rounded-lg text-xs font-semibold transition-colors mt-2 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" /> Reset Semua Filter
+              </button>
             </div>
           ) : (
             <div className="text-center py-16 text-zinc-500 bg-zinc-900/20 rounded-xl border border-zinc-800">

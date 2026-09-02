@@ -284,6 +284,17 @@ export function generateMarkdownPackage(pkgData: any, allItemsLookup?: any[]): s
     `📦 **${pkgData.name}**`,
   ];
 
+  const metaBadges: string[] = [];
+  if (pkgData.kategoriUtama && String(pkgData.kategoriUtama).trim()) {
+    metaBadges.push(`📁 **Kategori:** ${String(pkgData.kategoriUtama).trim()}`);
+  }
+  if (Array.isArray(pkgData.labelGrade) && pkgData.labelGrade.length > 0) {
+    metaBadges.push(`🏷️ **Label:** ${pkgData.labelGrade.join(", ")}`);
+  }
+  if (metaBadges.length > 0) {
+    lines.push(metaBadges.join(" | "));
+  }
+
   if (pkgData.description && String(pkgData.description).trim()) {
     lines.push(`_${String(pkgData.description).trim()}_`);
   }
