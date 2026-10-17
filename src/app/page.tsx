@@ -37,6 +37,18 @@ export default async function DashboardPage() {
     orderBy: { name: 'asc' }
   }).catch(() => [])
 
+  // Mengambil data detail event workspace
+  const eventDetails = await prisma.eventDetail.findMany({
+    include: {
+      crews: { orderBy: { createdAt: 'asc' } },
+      sponsors: { orderBy: { createdAt: 'asc' } },
+      vendors: { orderBy: { createdAt: 'asc' } },
+      manualEquipments: { orderBy: { createdAt: 'asc' } },
+      utilities: { orderBy: { createdAt: 'asc' } }
+    },
+    orderBy: { createdAt: 'desc' }
+  }).catch(() => [])
+
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -60,6 +72,7 @@ export default async function DashboardPage() {
         packages={packages} 
         masterCategories={masterCategories}
         masterLabels={masterLabels}
+        initialEventDetails={eventDetails}
       />
     </main>
   )

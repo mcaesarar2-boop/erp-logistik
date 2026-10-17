@@ -1272,3 +1272,728 @@ export async function syncActiveEvents() {
     return { success: false, error: error.message || "Gagal melakukan sinkronisasi data event." };
   }
 }
+
+// ============================================================
+// --- SERVER ACTIONS UNTUK EVENT MANAGEMENT WORKSPACE ---
+// ============================================================
+
+export async function getOrCreateEventDetail(historyId: string, eventName: string, durationDays: number = 1, erpTotalCost: number = 0) {
+  try {
+    let eventDetail = await prisma.eventDetail.findFirst({
+      where: { historyId },
+      include: {
+        crews: { orderBy: { createdAt: "asc" } },
+        sponsors: { orderBy: { createdAt: "asc" } },
+        vendors: { orderBy: { createdAt: "asc" } },
+        manualEquipments: { orderBy: { createdAt: "asc" } },
+        utilities: { orderBy: { createdAt: "asc" } },
+        guestStars: {
+          include: {
+            riders: { orderBy: { createdAt: "asc" } }
+          },
+          orderBy: { createdAt: "asc" }
+        },
+        timelineItems: {
+          orderBy: [{ dayNumber: "asc" }, { startTime: "asc" }]
+        }
+      }
+    });
+
+    if (!eventDetail) {
+      eventDetail = await prisma.eventDetail.create({
+        data: {
+          historyId,
+          eventName: eventName || "Event Tanpa Nama",
+          durationDays: Math.max(1, durationDays),
+          clientBudget: 0,
+          vendors: {
+            create: {
+              name: "ERP Logistik Pusat",
+              category: "Logistik Gudang",
+              cost: Math.max(0, erpTotalCost),
+              isErpPusat: true,
+              notes: "Tagihan rental peralatan logistik gudang pusat (auto-synced)"
+            }
+          }
+        },
+        include: {
+          crews: { orderBy: { createdAt: "asc" } },
+          sponsors: { orderBy: { createdAt: "asc" } },
+          vendors: { orderBy: { createdAt: "asc" } },
+          manualEquipments: { orderBy: { createdAt: "asc" } },
+          utilities: { orderBy: { createdAt: "asc" } },
+          guestStars: {
+            include: {
+              riders: { orderBy: { createdAt: "asc" } }
+            },
+            orderBy: { createdAt: "asc" }
+          },
+          timelineItems: {
+            orderBy: [{ dayNumber: "asc" }, { startTime: "asc" }]
+          }
+        }
+      });
+    } else {
+      // Pastikan vendor ERP Logistik Pusat selalu sinkron nilainya dengan total keranjang gudang
+      const erpVendor = eventDetail.vendors.find(v => v.isErpPusat);
+      if (erpVendor) {
+        if (Math.abs(erpVendor.cost - erpTotalCost) > 0.01) {
+          await prisma.eventVendor.update({
+            where: { id: erpVendor.id },
+            data: { cost: erpTotalCost }
+          });
+          erpVendor.cost = erpTotalCost;
+        }
+      } else {
+        const createdVendor = await prisma.eventVendor.create({
+          data: {
+            eventDetailId: eventDetail.id,
+            name: "ERP Logistik Pusat",
+            category: "Logistik Gudang",
+            cost: Math.max(0, erpTotalCost),
+            isErpPusat: true,
+            notes: "Tagihan rental peralatan logistik gudang pusat (auto-synced)"
+          }
+        });
+        eventDetail.vendors.unshift(createdVendor);
+      }
+    }
+
+    return { success: true, data: eventDetail };
+  } catch (error: any) {
+    console.error("getOrCreateEventDetail error:", error);
+    return { success: false, error: error.message || "Gagal memuat detail event." };
+  }
+}
+
+export async function createStandaloneEventWorkspace(eventName: string, durationDays: number = 1, clientBudget: number = 0) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
+  try {
+    const eventDetail = await prisma.eventDetail.create({
+      data: {
+        eventName: eventName.trim() || "Event Baru",
+        durationDays: Math.max(1, durationDays),
+        clientBudget: Math.max(0, clientBudget),
+      },
+      include: {
+        crews: true,
+        sponsors: true,
+        vendors: true,
+        manualEquipments: true,
+        utilities: true,
+        guestStars: {
+          include: {
+            riders: true
+          }
+        },
+        timelineItems: true
+      }
+    });
+    revalidatePath("/");
+    return { success: true, data: eventDetail };
+  } catch (error: any) {
+    console.error("createStandaloneEventWorkspace error:", error);
+    return { success: false, error: error.message || "Gagal membuat workspace event." };
+  }
+}
+
+
+export async function updateEventDetail(
+  eventDetailId: string,
+  data: { durationDays?: number; clientBudget?: number; notes?: string; status?: string; eventName?: string }
+) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
+  try {
+    const updated = await prisma.eventDetail.update({
+      where: { id: eventDetailId },
+      data: {
+        ...(data.eventName !== undefined && { eventName: data.eventName }),
+        ...(data.durationDays !== undefined && { durationDays: Math.max(1, data.durationDays) }),
+        ...(data.clientBudget !== undefined && { clientBudget: Math.max(0, data.clientBudget) }),
+        ...(data.notes !== undefined && { notes: data.notes }),
+        ...(data.status !== undefined && { status: data.status }),
+      }
+    });
+    revalidatePath("/");
+    return { success: true, data: updated };
+  } catch (error: any) {
+    console.error("updateEventDetail error:", error);
+    return { success: false, error: error.message || "Gagal memperbarui info event." };
+  }
+}
+
+export async function addEventCrew(eventDetailId: string, formData: FormData) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
+  try {
+    const name = (formData.get("name") as string)?.trim() || "";
+    const division = (formData.get("division") as string)?.trim() || "General";
+    const memberCount = Math.max(1, parseInt(formData.get("memberCount") as string) || 1);
+    const fee = Math.max(0, parseFloat(formData.get("fee") as string) || 0);
+    const notes = (formData.get("notes") as string)?.trim() || null;
+
+    if (!name) {
+      return { success: false, error: "Nama personil / deskripsi crew wajib diisi." };
+    }
+
+    const crew = await prisma.eventCrew.create({
+      data: {
+        eventDetailId,
+        name,
+        division,
+        memberCount,
+        fee,
+        notes
+      }
+    });
+
+    revalidatePath("/");
+    return { success: true, data: crew };
+  } catch (error: any) {
+    console.error("addEventCrew error:", error);
+    return { success: false, error: error.message || "Gagal menambahkan kru." };
+  }
+}
+
+export async function deleteEventCrew(crewId: string) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
+  try {
+    await prisma.eventCrew.delete({
+      where: { id: crewId }
+    });
+    revalidatePath("/");
+    return { success: true };
+  } catch (error: any) {
+    console.error("deleteEventCrew error:", error);
+    return { success: false, error: error.message || "Gagal menghapus kru." };
+  }
+}
+
+export async function addEventSponsor(eventDetailId: string, formData: FormData) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
+  try {
+    const name = (formData.get("name") as string)?.trim() || "";
+    const supportType = (formData.get("supportType") as string)?.trim() || "DANA";
+    const amount = Math.max(0, parseFloat(formData.get("amount") as string) || 0);
+    const status = (formData.get("status") as string)?.trim() || "CONFIRMED";
+    const notes = (formData.get("notes") as string)?.trim() || null;
+
+    if (!name) {
+      return { success: false, error: "Nama sponsor wajib diisi." };
+    }
+
+    const sponsor = await prisma.eventSponsor.create({
+      data: {
+        eventDetailId,
+        name,
+        supportType,
+        amount,
+        status,
+        notes
+      }
+    });
+
+    revalidatePath("/");
+    return { success: true, data: sponsor };
+  } catch (error: any) {
+    console.error("addEventSponsor error:", error);
+    return { success: false, error: error.message || "Gagal menambahkan sponsor." };
+  }
+}
+
+export async function deleteEventSponsor(sponsorId: string) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
+  try {
+    await prisma.eventSponsor.delete({
+      where: { id: sponsorId }
+    });
+    revalidatePath("/");
+    return { success: true };
+  } catch (error: any) {
+    console.error("deleteEventSponsor error:", error);
+    return { success: false, error: error.message || "Gagal menghapus sponsor." };
+  }
+}
+
+export async function updateEventSponsorStatus(sponsorId: string, status: string) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
+  try {
+    await prisma.eventSponsor.update({
+      where: { id: sponsorId },
+      data: { status }
+    });
+    revalidatePath("/");
+    return { success: true };
+  } catch (error: any) {
+    console.error("updateEventSponsorStatus error:", error);
+    return { success: false, error: error.message || "Gagal memperbarui status sponsor." };
+  }
+}
+
+export async function addEventVendor(eventDetailId: string, formData: FormData) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
+  try {
+    const name = (formData.get("name") as string)?.trim() || "";
+    const category = (formData.get("category") as string)?.trim() || "Umum";
+    const cost = Math.max(0, parseFloat(formData.get("cost") as string) || 0);
+    const notes = (formData.get("notes") as string)?.trim() || null;
+
+    if (!name) {
+      return { success: false, error: "Nama vendor wajib diisi." };
+    }
+
+    const vendor = await prisma.eventVendor.create({
+      data: {
+        eventDetailId,
+        name,
+        category,
+        cost,
+        isErpPusat: false,
+        notes
+      }
+    });
+
+    revalidatePath("/");
+    return { success: true, data: vendor };
+  } catch (error: any) {
+    console.error("addEventVendor error:", error);
+    return { success: false, error: error.message || "Gagal menambahkan vendor." };
+  }
+}
+
+export async function deleteEventVendor(vendorId: string) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
+  try {
+    const existing = await prisma.eventVendor.findUnique({ where: { id: vendorId } });
+    if (existing?.isErpPusat) {
+      return { success: false, error: "Vendor ERP Logistik Pusat tidak dapat dihapus karena tersinkronisasi otomatis." };
+    }
+    await prisma.eventVendor.delete({
+      where: { id: vendorId }
+    });
+    revalidatePath("/");
+    return { success: true };
+  } catch (error: any) {
+    console.error("deleteEventVendor error:", error);
+    return { success: false, error: error.message || "Gagal menghapus vendor." };
+  }
+}
+
+export async function addEventManualEquipment(eventDetailId: string, formData: FormData) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
+  try {
+    const name = (formData.get("name") as string)?.trim() || "";
+    const category = (formData.get("category") as string)?.trim() || "Peralatan";
+    const quantity = Math.max(1, parseInt(formData.get("quantity") as string) || 1);
+    const procurementType = ((formData.get("procurementType") as string)?.toUpperCase() === "BELI" ? "BELI" : "SEWA") as "BELI" | "SEWA";
+    
+    let unitPrice = 0;
+    let rentalPricePerDay = 0;
+    let rentalDays = 1;
+    let totalCost = 0;
+
+    if (procurementType === "BELI") {
+      unitPrice = Math.max(0, parseFloat(formData.get("unitPrice") as string) || 0);
+      totalCost = quantity * unitPrice;
+    } else {
+      rentalPricePerDay = Math.max(0, parseFloat(formData.get("rentalPricePerDay") as string) || 0);
+      rentalDays = Math.max(1, parseInt(formData.get("rentalDays") as string) || 1);
+      totalCost = quantity * rentalPricePerDay * rentalDays;
+    }
+
+    const notes = (formData.get("notes") as string)?.trim() || null;
+
+    if (!name) {
+      return { success: false, error: "Nama barang peralatan wajib diisi." };
+    }
+
+    const equipment = await prisma.eventManualEquipment.create({
+      data: {
+        eventDetailId,
+        name,
+        category,
+        quantity,
+        procurementType,
+        unitPrice,
+        rentalPricePerDay,
+        rentalDays,
+        totalCost,
+        notes
+      }
+    });
+
+    revalidatePath("/");
+    return { success: true, data: equipment };
+  } catch (error: any) {
+    console.error("addEventManualEquipment error:", error);
+    return { success: false, error: error.message || "Gagal menambahkan peralatan manual." };
+  }
+}
+
+export async function deleteEventManualEquipment(equipmentId: string) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
+  try {
+    await prisma.eventManualEquipment.delete({
+      where: { id: equipmentId }
+    });
+    revalidatePath("/");
+    return { success: true };
+  } catch (error: any) {
+    console.error("deleteEventManualEquipment error:", error);
+    return { success: false, error: error.message || "Gagal menghapus peralatan manual." };
+  }
+}
+
+export async function addEventUtility(eventDetailId: string, formData: FormData) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
+  try {
+    const name = (formData.get("name") as string)?.trim() || "";
+    const category = (formData.get("category") as string)?.trim() || "Konsumsi";
+    const quantity = Math.max(1, parseInt(formData.get("quantity") as string) || 1);
+    const unit = (formData.get("unit") as string)?.trim() || "pcs";
+    const procurementType = ((formData.get("procurementType") as string)?.toUpperCase() === "SEWA" ? "SEWA" : "BELI") as "BELI" | "SEWA";
+
+    let unitPrice = 0;
+    let rentalPricePerDay = 0;
+    let rentalDays = 1;
+    let totalCost = 0;
+
+    if (procurementType === "BELI") {
+      unitPrice = Math.max(0, parseFloat(formData.get("unitPrice") as string) || 0);
+      totalCost = quantity * unitPrice;
+    } else {
+      rentalPricePerDay = Math.max(0, parseFloat(formData.get("rentalPricePerDay") as string) || 0);
+      rentalDays = Math.max(1, parseInt(formData.get("rentalDays") as string) || 1);
+      totalCost = quantity * rentalPricePerDay * rentalDays;
+    }
+
+    const notes = (formData.get("notes") as string)?.trim() || null;
+
+    if (!name) {
+      return { success: false, error: "Nama kebutuhan utilitas wajib diisi." };
+    }
+
+    const utility = await prisma.eventUtility.create({
+      data: {
+        eventDetailId,
+        name,
+        category,
+        quantity,
+        unit,
+        procurementType,
+        unitPrice,
+        rentalPricePerDay,
+        rentalDays,
+        totalCost,
+        notes
+      }
+    });
+
+    revalidatePath("/");
+    return { success: true, data: utility };
+  } catch (error: any) {
+    console.error("addEventUtility error:", error);
+    return { success: false, error: error.message || "Gagal menambahkan utilitas event." };
+  }
+}
+
+export async function deleteEventUtility(utilityId: string) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
+  try {
+    await prisma.eventUtility.delete({
+      where: { id: utilityId }
+    });
+    revalidatePath("/");
+    return { success: true };
+  } catch (error: any) {
+    console.error("deleteEventUtility error:", error);
+    return { success: false, error: error.message || "Gagal menghapus utilitas event." };
+  }
+}
+
+// -------------------------------------------------------------
+// GUEST STAR & RIDERS MANAGEMENT ACTIONS
+// -------------------------------------------------------------
+
+export async function addEventGuestStar(eventDetailId: string, formData: FormData) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
+  try {
+    const name = (formData.get("name") as string)?.trim() || "";
+    const category = (formData.get("category") as string)?.trim() || "BAND";
+    const personnelCount = Math.max(1, parseInt(formData.get("personnelCount") as string) || 1);
+    const contactPerson = (formData.get("contactPerson") as string)?.trim() || null;
+    const feePerDay = Math.max(0, parseFloat(formData.get("feePerDay") as string) || 0);
+    const durationDays = Math.max(1, parseInt(formData.get("durationDays") as string) || 1);
+    const dayNumber = Math.max(1, parseInt(formData.get("dayNumber") as string) || 1);
+    const stageTime = (formData.get("stageTime") as string)?.trim() || null;
+    const stageLocation = (formData.get("stageLocation") as string)?.trim() || "Main Stage";
+    const notes = (formData.get("notes") as string)?.trim() || null;
+
+    let timelineSlots: string[] = [];
+    try {
+      const rawSlots = formData.get("timelineSlots") as string;
+      if (rawSlots) {
+        timelineSlots = JSON.parse(rawSlots);
+      }
+    } catch {
+      timelineSlots = [];
+    }
+
+    if (!name) {
+      return { success: false, error: "Nama Guest Star / Artis wajib diisi." };
+    }
+
+    const totalFee = feePerDay * durationDays;
+
+    const guestStar = await prisma.eventGuestStar.create({
+      data: {
+        eventDetailId,
+        name,
+        category,
+        personnelCount,
+        contactPerson,
+        feePerDay,
+        durationDays,
+        totalFee,
+        dayNumber,
+        stageTime,
+        timelineSlots,
+        notes
+      },
+      include: {
+        riders: true
+      }
+    });
+
+    // Otomatis sinkronkan slot jadwal ke tabel EventTimelineItem terpusat
+    if (timelineSlots.length > 0) {
+      const sortedSlots = [...timelineSlots].sort();
+      const startTime = sortedSlots[0];
+      const lastSlot = sortedSlots[sortedSlots.length - 1];
+      const [lastH, lastM] = lastSlot.split(":").map(Number);
+      let endH = lastH;
+      let endM = lastM + 30;
+      if (endM >= 60) {
+        endH = (endH + 1) % 24;
+        endM = endM - 60;
+      }
+      const endTime = `${String(endH).padStart(2, "0")}:${String(endM).padStart(2, "0")}`;
+
+      const createdTimelineItem = await prisma.eventTimelineItem.create({
+        data: {
+          eventDetailId,
+          guestStarId: guestStar.id,
+          dayNumber,
+          title: name,
+          category: "PERFORMANCE",
+          startTime,
+          endTime,
+          slots: sortedSlots,
+          stageLocation,
+          notes
+        }
+      });
+      revalidatePath("/");
+      return { success: true, data: guestStar, timelineItem: createdTimelineItem };
+    }
+
+    revalidatePath("/");
+    return { success: true, data: guestStar, timelineItem: null };
+  } catch (error: any) {
+    console.error("addEventGuestStar error:", error);
+    return { success: false, error: error.message || "Gagal menambahkan Guest Star." };
+  }
+}
+
+export async function deleteEventGuestStar(guestStarId: string) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
+  try {
+    await prisma.eventTimelineItem.deleteMany({
+      where: { guestStarId }
+    });
+    await prisma.eventGuestStar.delete({
+      where: { id: guestStarId }
+    });
+    revalidatePath("/");
+    return { success: true };
+  } catch (error: any) {
+    console.error("deleteEventGuestStar error:", error);
+    return { success: false, error: error.message || "Gagal menghapus Guest Star." };
+  }
+}
+
+export async function addEventGuestStarRider(guestStarId: string, formData: FormData) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
+  try {
+    const name = (formData.get("name") as string)?.trim() || "";
+    const riderType = (formData.get("riderType") as string)?.trim() || "TECHNICAL";
+    const sourceType = (formData.get("sourceType") as string)?.trim() || "VENDOR_LUAR";
+    const quantity = Math.max(1, parseInt(formData.get("quantity") as string) || 1);
+    const unit = (formData.get("unit") as string)?.trim() || "Unit";
+    const notes = (formData.get("notes") as string)?.trim() || null;
+
+    if (!name) {
+      return { success: false, error: "Nama kebutuhan riders wajib diisi." };
+    }
+
+    let procurementType = "SEWA";
+    let unitPrice = 0;
+    let rentalPricePerDay = 0;
+    let rentalDays = 1;
+    let totalCost = 0;
+
+    if (sourceType === "ERP_LOGISTIK") {
+      procurementType = "FREE_ERP";
+      unitPrice = 0;
+      rentalPricePerDay = 0;
+      rentalDays = 1;
+      totalCost = 0; // Tercover dalam transaksi paket/sewa ERP Pusat
+    } else {
+      procurementType = ((formData.get("procurementType") as string)?.toUpperCase() === "BELI" ? "BELI" : "SEWA");
+      if (procurementType === "BELI") {
+        unitPrice = Math.max(0, parseFloat(formData.get("unitPrice") as string) || 0);
+        totalCost = quantity * unitPrice;
+      } else {
+        rentalPricePerDay = Math.max(0, parseFloat(formData.get("rentalPricePerDay") as string) || 0);
+        rentalDays = Math.max(1, parseInt(formData.get("rentalDays") as string) || 1);
+        totalCost = quantity * rentalPricePerDay * rentalDays;
+      }
+    }
+
+    const rider = await prisma.eventGuestStarRider.create({
+      data: {
+        guestStarId,
+        name,
+        riderType,
+        sourceType,
+        quantity,
+        unit,
+        procurementType,
+        unitPrice,
+        rentalPricePerDay,
+        rentalDays,
+        totalCost,
+        notes
+      }
+    });
+
+    revalidatePath("/");
+    return { success: true, data: rider };
+  } catch (error: any) {
+    console.error("addEventGuestStarRider error:", error);
+    return { success: false, error: error.message || "Gagal menambahkan item riders." };
+  }
+}
+
+export async function deleteEventGuestStarRider(riderId: string) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
+  try {
+    await prisma.eventGuestStarRider.delete({
+      where: { id: riderId }
+    });
+    revalidatePath("/");
+    return { success: true };
+  } catch (error: any) {
+    console.error("deleteEventGuestStarRider error:", error);
+    return { success: false, error: error.message || "Gagal menghapus item riders." };
+  }
+}
+
+// -------------------------------------------------------------
+// CENTRALIZED TIMELINE & SCHEDULE ACTIONS
+// -------------------------------------------------------------
+
+export async function addEventTimelineItem(eventDetailId: string, formData: FormData) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
+  try {
+    const title = (formData.get("title") as string)?.trim() || "";
+    const category = (formData.get("category") as string)?.trim() || "PERFORMANCE";
+    const dayNumber = Math.max(1, parseInt(formData.get("dayNumber") as string) || 1);
+    const guestStarId = (formData.get("guestStarId") as string)?.trim() || null;
+    const stageLocation = (formData.get("stageLocation") as string)?.trim() || "Main Stage";
+    const notes = (formData.get("notes") as string)?.trim() || null;
+
+    let slots: string[] = [];
+    try {
+      const rawSlots = formData.get("slots") as string;
+      if (rawSlots) slots = JSON.parse(rawSlots);
+    } catch {
+      slots = [];
+    }
+
+    if (!title) {
+      return { success: false, error: "Nama agenda / aktivitas wajib diisi." };
+    }
+    if (slots.length === 0) {
+      return { success: false, error: "Pilih minimal 1 slot waktu (30 menit)." };
+    }
+
+    const sortedSlots = [...slots].sort();
+    const startTime = sortedSlots[0];
+    const lastSlot = sortedSlots[sortedSlots.length - 1];
+    const [lastH, lastM] = lastSlot.split(":").map(Number);
+    let endH = lastH;
+    let endM = lastM + 30;
+    if (endM >= 60) {
+      endH = (endH + 1) % 24;
+      endM = endM - 60;
+    }
+    const endTime = `${String(endH).padStart(2, "0")}:${String(endM).padStart(2, "0")}`;
+
+    const item = await prisma.eventTimelineItem.create({
+      data: {
+        eventDetailId,
+        guestStarId: guestStarId || undefined,
+        dayNumber,
+        title,
+        category,
+        startTime,
+        endTime,
+        slots: sortedSlots,
+        stageLocation,
+        notes
+      }
+    });
+
+    revalidatePath("/");
+    return { success: true, data: item };
+  } catch (error: any) {
+    console.error("addEventTimelineItem error:", error);
+    return { success: false, error: error.message || "Gagal menambahkan agenda timeline." };
+  }
+}
+
+export async function deleteEventTimelineItem(timelineItemId: string) {
+  const validationError = await validateDummyUser();
+  if (validationError) return validationError;
+  try {
+    await prisma.eventTimelineItem.delete({
+      where: { id: timelineItemId }
+    });
+    revalidatePath("/");
+    return { success: true };
+  } catch (error: any) {
+    console.error("deleteEventTimelineItem error:", error);
+    return { success: false, error: error.message || "Gagal menghapus agenda timeline." };
+  }
+}
+
+
+

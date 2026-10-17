@@ -23,6 +23,7 @@ import { isAdminEmail, isDemoEmail, DEMO_MESSAGES } from "@/lib/permissions";
 import { ItemThumbnail } from "@/components/ItemThumbnail";
 import { groupItemsByPrimaryCategory, generateMarkdownInvoice, generateMarkdownEvent, generateMarkdownPackage } from "@/lib/grouping";
 import Barcode from "react-barcode";
+import EventManagementTab from "@/components/EventManagementTab";
 
 // --- KOMPONEN VISUAL BARCODE SEDERHANA ---
 const DummyBarcode = ({ value }: { value: string }) => {
@@ -84,11 +85,12 @@ interface MultiLayerDashboardProps {
   packages: PackageTemplate[];
   masterCategories?: { id: string; name: string }[];
   masterLabels?: { id: string; name: string }[];
+  initialEventDetails?: any[];
 }
 
-export default function MultiLayerDashboard({ items, categories, histories, packages, masterCategories = [], masterLabels = [] }: MultiLayerDashboardProps) {
+export default function MultiLayerDashboard({ items, categories, histories, packages, masterCategories = [], masterLabels = [], initialEventDetails = [] }: MultiLayerDashboardProps) {
   const router = useRouter();
-  const [activeLayer, setActiveLayer] = useState<'home' | 'all_items' | 'rented' | 'maintenance' | 'history' | 'packages'>('home');
+  const [activeLayer, setActiveLayer] = useState<'home' | 'all_items' | 'rented' | 'maintenance' | 'history' | 'packages' | 'events'>('home');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>('name_asc');
@@ -418,6 +420,7 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
     { id: 'maintenance', label: 'Maintenance' },
     { id: 'history', label: 'Riwayat Transaksi' },
     { id: 'packages', label: 'Katalog Paket' },
+    { id: 'events', label: 'Event Management' },
   ] as const;
 
   // FUNGSI AKSI HISTORY
@@ -1055,7 +1058,7 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
       )}
 
       {/* Layer 3: Data Barang (All, Rented, Maintenance) */}
-      {activeLayer !== 'home' && activeLayer !== 'history' && activeLayer !== 'packages' && (
+      {activeLayer !== 'home' && activeLayer !== 'history' && activeLayer !== 'packages' && activeLayer !== 'events' && (
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <h2 className="text-xl font-bold text-zinc-100">
@@ -1358,6 +1361,17 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                           <ReturnRentalDialog items={itemsToDisplay} activeEvent={event} />
                         </div>
                       </div>
+
+                      <div className="mt-2 pt-2 border-t border-zinc-800/80">
+                        <button
+                          type="button"
+                          onClick={() => setActiveLayer('events')}
+                          className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 bg-blue-950/40 hover:bg-blue-900/60 text-blue-400 border border-blue-800/50 rounded-md text-xs font-semibold transition-all shadow-sm cursor-pointer"
+                        >
+                          <Calendar className="w-3.5 h-3.5" />
+                          <span>Buka di Event Management</span>
+                        </button>
+                      </div>
                     </div>
                   )
                 })}
@@ -1534,6 +1548,15 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
             </div>
           )}
         </div>
+      )}
+
+      {/* Layer 4: Event Management Workspace */}
+      {activeLayer === 'events' && (
+        <EventManagementTab
+          histories={histories}
+          items={items}
+          initialEventDetails={initialEventDetails}
+        />
       )}
 
       {/* --- KOTAK POPUP PREVIEW FOTO --- */}
