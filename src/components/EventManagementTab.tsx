@@ -228,7 +228,7 @@ export default function EventManagementTab({
   // --- SUB-TAB STATE ---
   const [activeSubTab, setActiveSubTab] = useState<"overview" | "budgeting" | "equipment" | "utility" | "gueststar" | "timeline">("overview");
 
-  // --- DAFTAR EVENT AKTIF DARI ON RENTED & HISTORIES ---
+  // --- DAFTAR EVENT AKTIF DARI ON RENTED (MENGIKUTI DAFTAR EVENT / ACARA AKTIF DI DASHBOARD ON RENTED) ---
   const availableEvents = useMemo(() => {
     const list: {
       id: string;
@@ -241,17 +241,32 @@ export default function EventManagementTab({
     }[] = [];
 
     histories.forEach(h => {
-      if (h.type !== "INVOICE_RENTAL") return;
-      
-      const isExplicitEvent = h.description?.includes("Event:");
-      const isCompleted = h.description?.includes("[SELESAI]");
+      // 1. Validasi tipe dan status event (Hanya transaksi Event aktif di On Rented)
+      if (
+        h.type !== "INVOICE_RENTAL" ||
+        !h.description?.includes("Event:") ||
+        h.description?.includes("[SELESAI]")
+      ) {
+        return;
+      }
 
+      // 2. Proteksi UI: Cek apakah masih ada barang fisik yang belum dikembalikan (Rented > 0)
+      if (!h.payload) return;
       let payload: any[] = [];
       try {
-        payload = h.payload ? JSON.parse(h.payload) : [];
+        payload = JSON.parse(h.payload);
+        if (!Array.isArray(payload) || payload.length === 0) return;
       } catch {
-        payload = [];
+        return;
       }
+
+      const activeItems = payload.filter((p: any) => {
+        const remainingQty = (Number(p.qty) || 0) - (Number(p.returnedQty) || 0);
+        const isPhysicalItem = p.code !== "LAYANAN" && !(p.id && String(p.id).startsWith("custom-"));
+        return isPhysicalItem && remainingQty > 0;
+      });
+
+      if (activeItems.length === 0) return;
 
       // Hitung total nilai rental ERP
       const erpTotalCost = payload.reduce(
@@ -263,24 +278,8 @@ export default function EventManagementTab({
       const dayMatch = h.description?.match(/(\d+)\s*Hari/i);
       const durationDays = dayMatch ? Math.max(1, parseInt(dayMatch[1])) : 1;
 
-      // Bersihkan nama event
-      let title = "Transaksi Rental";
-      if (isExplicitEvent) {
-        title = h.description.split("|")[0].replace("Event:", "").trim();
-      } else if (h.description?.startsWith("[")) {
-        title = h.description.split("]")[0].replace("[", "").trim();
-      } else {
-        title = h.description?.split("(")[0]?.trim() || "Rental Transaksi";
-      }
-
-      // Deteksi apakah masih aktif (belum dikembalikan semua)
-      const hasUnreturnedPhysical = payload.some((p: any) => {
-        const remaining = (Number(p.qty) || 0) - (Number(p.returnedQty) || 0);
-        const isPhysical = p.code !== "LAYANAN" && !(p.id && String(p.id).startsWith("custom-"));
-        return isPhysical && remaining > 0;
-      });
-
-      const isActive = !isCompleted && hasUnreturnedPhysical;
+      // Bersihkan nama event konsisten dengan Daftar Event di On Rented
+      const title = h.description.split("|")[0].replace("Event:", "").trim() || "Event Aktif";
 
       list.push({
         id: h.id,
@@ -289,16 +288,12 @@ export default function EventManagementTab({
         durationDays,
         erpTotalCost,
         payload,
-        isActive
+        isActive: true
       });
     });
 
-    // Urutkan: Aktif di atas, lalu urut tanggal terbaru
-    return list.sort((a, b) => {
-      if (a.isActive && !b.isActive) return -1;
-      if (!a.isActive && b.isActive) return 1;
-      return new Date(b.date).getTime() - new Date(a.date).getTime();
-    });
+    // Urutkan tanggal terbaru
+    return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [histories]);
 
   // --- EVENT YANG SEDANG DIPILIH ---
@@ -316,12 +311,27 @@ export default function EventManagementTab({
     if (!selectedHistoryId) {
       if (availableEvents.length > 0) {
         setSelectedHistoryId(availableEvents[0].id);
+      } else {
+        setEventDetail(null);
       }
       return;
     }
 
     const currentEvent = availableEvents.find(e => e.id === selectedHistoryId);
-    if (!currentEvent) return;
+    if (!currentEvent) {
+      // Jika event yang dipilih sebelumnya adalah standalone event yang sedang dibuka
+      if (eventDetail && eventDetail.id === selectedHistoryId) {
+        return;
+      }
+      // Jika ada event aktif di On Rented, default ke event aktif pertama
+      if (availableEvents.length > 0) {
+        setSelectedHistoryId(availableEvents[0].id);
+      } else {
+        setSelectedHistoryId("");
+        setEventDetail(null);
+      }
+      return;
+    }
 
     let isMounted = true;
     setIsLoadingDetail(true);
@@ -1473,6 +1483,11 @@ export default function EventManagementTab({
                   on rented aktif
                 </span>
               )}
+              {eventDetail && !currentSelectedSummary && (
+                <span className="flex items-center gap-1 bg-blue-950/80 border border-blue-700/60 text-blue-400 px-2 py-0.5 rounded-full text-[10px] lowercase font-normal">
+                  workspace mandiri
+                </span>
+              )}
             </div>
 
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -1482,15 +1497,19 @@ export default function EventManagementTab({
                   onChange={e => setSelectedHistoryId(e.target.value)}
                   className="w-full bg-zinc-950 text-zinc-100 text-sm sm:text-base font-semibold border border-zinc-700 hover:border-zinc-600 focus:border-blue-500 rounded-xl px-4 py-3 outline-none transition-all shadow-inner cursor-pointer"
                 >
-                  {availableEvents.length === 0 && (
-                    <option value="">-- Belum ada riwayat transaksi rental --</option>
+                  {availableEvents.length === 0 && !eventDetail && (
+                    <option value="">-- Tidak ada acara aktif di On Rented --</option>
                   )}
                   {availableEvents.map(event => (
                     <option key={event.id} value={event.id}>
-                      {event.isActive ? "🟢 [Aktif] " : "📜 "}
-                      {event.title} ({event.durationDays} Hari) - {formatRupiah(event.erpTotalCost)}
+                      🟢 [Aktif] {event.title} ({event.durationDays} Hari) - {formatRupiah(event.erpTotalCost)}
                     </option>
                   ))}
+                  {eventDetail && !availableEvents.some(e => e.id === eventDetail.id) && (
+                    <option value={eventDetail.id}>
+                      ✨ [Mandiri] {eventDetail.eventName} ({eventDetail.durationDays} Hari)
+                    </option>
+                  )}
                 </select>
               </div>
 
@@ -1597,10 +1616,32 @@ export default function EventManagementTab({
         </div>
       </div>
 
-      {/* ============================================================ */}
-      {/* 2. SUB-TAB NAVIGATION (RESPONSIVE WRAP, TANPA SCROLLBAR SAMPING) */}
-      {/* ============================================================ */}
-      <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-2 sm:p-2.5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-sm">
+      {availableEvents.length === 0 && !eventDetail ? (
+        <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-10 sm:p-14 text-center flex flex-col items-center justify-center space-y-4 shadow-xl">
+          <div className="w-16 h-16 rounded-2xl bg-zinc-800/80 border border-zinc-700 flex items-center justify-center text-zinc-500 shadow-inner">
+            <Calendar className="w-8 h-8 text-amber-400" />
+          </div>
+          <div className="max-w-md space-y-2">
+            <h3 className="text-lg font-bold text-zinc-100">Tidak Ada Acara Aktif di On Rented</h3>
+            <p className="text-sm text-zinc-400 leading-relaxed">
+              Saat ini tidak ada acara rental yang berstatus aktif di tab On Rented. Anda dapat menyewakan alat dengan tipe Event di POS Kasir atau membuat workspace mandiri baru.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsStandaloneDialogOpen(true)}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-colors shadow-lg cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Inisialisasi Workspace Baru</span>
+          </button>
+        </div>
+      ) : (
+        <>
+          {/* ============================================================ */}
+          {/* 2. SUB-TAB NAVIGATION (RESPONSIVE WRAP, TANPA SCROLLBAR SAMPING) */}
+          {/* ============================================================ */}
+          <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-2 sm:p-2.5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-sm">
         {/* Buttons List with flex-wrap so it wraps cleanly without cutting off */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Sub-Tab 1: Overview */}
@@ -4374,6 +4415,8 @@ export default function EventManagementTab({
 
           {renderTimelineContent()}
         </div>
+      )}
+        </>
       )}
 
       {/* ============================================================ */}
