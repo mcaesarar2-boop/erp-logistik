@@ -7,6 +7,10 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// =========================================================================
+// [BAGIAN 1] ACTIVE ERP LOGISTIK MODELS (INVENTARIS, PAKET, TRANSAKSI, MASTER DATA)
+// =========================================================================
+
 model Category {
   id          String   @id @default(cuid())
   name        String   @unique
@@ -67,6 +71,11 @@ model MasterLabel {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+// =========================================================================
+// [BAGIAN 2] SUPABASE LEGACY / UNUSED MODELS (READ-ONLY PRESERVATION)
+// PERHATIAN: JANGAN DIHAPUS agar tidak memicu destructive migration pada Supabase DB.
+// =========================================================================
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model artists {
@@ -523,7 +532,10 @@ model venues {
   @@index([name], map: "idx_venues_name")
 }
 
-// --- MODEL EVENT MANAGEMENT ---
+// =========================================================================
+// [BAGIAN 3] ACTIVE ERP EVENT MANAGEMENT WORKSPACE MODELS
+// =========================================================================
+
 model EventDetail {
   id               String                 @id @default(cuid())
   historyId        String?                @unique

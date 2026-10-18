@@ -6,7 +6,7 @@ import type { Session } from "@supabase/supabase-js"
 import { UserCircle, Upload, Save, Lock, Loader2, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { DemoRestrictionDialog } from "@/components/DemoRestrictionDialog"
+import { DemoRestrictionDialog } from "@/shared/components/DemoRestrictionDialog"
 import { isDemoEmail, DEMO_MESSAGES } from "@/lib/permissions"
 
 export default function ProfilePage() {
@@ -30,6 +30,12 @@ export default function ProfilePage() {
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
+
+  const showMessage = (type: 'success'|'error', text: string) => {
+    setMessage({ type, text })
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => setMessage(null), 5000)
+  }
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -59,12 +65,6 @@ export default function ProfilePage() {
     // Unsubscribe saat komponen di-unmount
     return () => subscription.unsubscribe()
   }, [])
-
-  const showMessage = (type: 'success'|'error', text: string) => {
-    setMessage({ type, text })
-    if (timerRef.current) clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(() => setMessage(null), 5000)
-  }
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault()

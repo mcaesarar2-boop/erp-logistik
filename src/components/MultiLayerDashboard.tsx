@@ -1,82 +1,57 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from "react";
-import { useRouter } from "next/navigation";
-import { EditItemDialog } from "@/components/EditItemDialog";
-import { DeleteItemDialog } from "@/components/DeleteItemDialog";
-import { AddCategoryDialog } from "@/components/AddCategoryDialog";
-import { EditCategoryDialog } from "@/components/EditCategoryDialog"; 
-import { DeleteCategoryDialog } from "@/components/DeleteCategoryDialog";
-import { Search, ArrowUpDown, History as HistoryIcon, Calendar, Trash2, Pencil, Loader2, Printer, PackageSearch, Eye, ShoppingCart, PlusCircle, Copy, Check, RefreshCw, Plus, Filter, Tag, X, ChevronDown } from "lucide-react";
-import { supabase } from "@/lib/supabase";
-import { Dialog, DialogContent, DialogTitle, DialogTrigger, DialogHeader } from "@/components/ui/dialog";
-import { RentalInvoiceDialog } from "@/components/RentalInvoiceDialog";
-import { ReturnRentalDialog } from "@/components/ReturnRentalDialog";
-import { ReprintInvoiceDialog } from "@/components/ReprintInvoiceDialog";
-import { EditPackageDialog } from "@/components/EditPackageDialog";
-import { PrintPackageDialog } from "@/components/PrintPackageDialog";
-import { updateHistory, deleteHistory, deletePackageTemplate, batchRegenerateCodes, syncActiveEvents } from "@/app/actions";
-import { AddToPackageDialog } from "@/components/AddToPackageDialog";
-import { ManagePackageMasterDialog } from "@/components/ManagePackageMasterDialog";
-import { DemoRestrictionDialog } from "@/components/DemoRestrictionDialog";
-import { isAdminEmail, isDemoEmail, DEMO_MESSAGES } from "@/lib/permissions";
-import { ItemThumbnail } from "@/components/ItemThumbnail";
-import { groupItemsByPrimaryCategory, generateMarkdownInvoice, generateMarkdownEvent, generateMarkdownPackage } from "@/lib/grouping";
-import Barcode from "react-barcode";
-import EventManagementTab from "@/components/EventManagementTab";
+import React, { useState } from "react";
+import dynamic from "next/dynamic";
+import { ShoppingCart } from "lucide-react";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { HighlightOverview } from "@/features/highlight";
+import { usePosCart } from "@/features/pos-cart";
+import { DemoRestrictionDialog } from "@/shared/components/DemoRestrictionDialog";
+import { useAuthPermission } from "@/shared/hooks/useAuthPermission";
+import type { Item, Category, History, PackageTemplate } from "@/shared/types/common";
 
-// --- KOMPONEN VISUAL BARCODE SEDERHANA ---
-const DummyBarcode = ({ value }: { value: string }) => {
+// Minimal dark-mode loading skeleton for code-split tabs
+function TabLoadingSkeleton({ label }: { label: string }) {
   return (
-    <div className="flex flex-col items-center justify-center bg-white py-3 px-6 sm:py-4 sm:px-8 rounded-md border border-zinc-200 select-none shadow-sm w-full sm:w-auto self-center mx-auto max-w-full overflow-x-hidden">
-      <div className="flex flex-col items-center justify-center w-full max-w-full">
-        <Barcode value={value} format="CODE128" width={1.5} height={50} displayValue={true} background="transparent" />
-      </div>
+    <div className="w-full py-20 flex flex-col items-center justify-center space-y-3 animate-pulse">
+      <div className="w-8 h-8 rounded-full border-2 border-zinc-700 border-t-emerald-500 animate-spin" />
+      <span className="text-xs font-medium text-zinc-400">
+        Memuat modul {label}...
+      </span>
     </div>
   );
-};
+}
 
-type Category = {
-  id: string;
-  name: string;
-};
+// Lazy-loaded tab components via next/dynamic for initial bundle reduction
+const InventoryGrid = dynamic(
+  () => import("@/features/inventory").then((mod) => mod.InventoryGrid),
+  { loading: () => <TabLoadingSkeleton label="Inventaris Aset" />, ssr: false }
+);
 
-type Item = {
-  id: string;
-  code: string;
-  name: string;
-  description?: string | null;
-  quantity: number;
-  rentedQuantity: number;
-  maintenanceQuantity: number;
-  status: string;
-  imageUrl?: string | null;
-  categories: Category[];
-  price?: number | null;
-  rentPercentage?: number | null;
-  createdAt?: string | Date;
-  updatedAt?: string | Date;
-};
+const OnRentedTab = dynamic(
+  () => import("@/features/on-rented").then((mod) => mod.OnRentedTab),
+  { loading: () => <TabLoadingSkeleton label="Barang Keluar & Event" />, ssr: false }
+);
 
-type History = {
-  id: string;
-  type: string;
-  date: Date | string;
-  description: string | null;
-  payload: string | null;
-  createdAt: Date | string;
-};
+const MaintenanceTable = dynamic(
+  () => import("@/features/maintenance").then((mod) => mod.MaintenanceTable),
+  { loading: () => <TabLoadingSkeleton label="Pemeliharaan" />, ssr: false }
+);
 
-type PackageTemplate = {
-  id: string;
-  name: string;
-  description: string | null;
-  payload: string;
-  kategoriUtama?: string | null;
-  labelGrade?: string[];
-  createdAt?: Date | string;
-  updatedAt?: Date | string;
-};
+const TransactionHistoryTable = dynamic(
+  () => import("@/features/transactions").then((mod) => mod.TransactionHistoryTable),
+  { loading: () => <TabLoadingSkeleton label="Riwayat Transaksi" />, ssr: false }
+);
+
+const PackageCatalogGrid = dynamic(
+  () => import("@/features/packages").then((mod) => mod.PackageCatalogGrid),
+  { loading: () => <TabLoadingSkeleton label="Katalog Paket" />, ssr: false }
+);
+
+const EventManagementTab = dynamic(
+  () => import("@/features/event-management").then((mod) => mod.EventManagementTab),
+  { loading: () => <TabLoadingSkeleton label="Event Management" />, ssr: false }
+);
 
 interface MultiLayerDashboardProps {
   items: Item[];
@@ -88,424 +63,61 @@ interface MultiLayerDashboardProps {
   initialEventDetails?: any[];
 }
 
-export default function MultiLayerDashboard({ items, categories, histories, packages, masterCategories = [], masterLabels = [], initialEventDetails = [] }: MultiLayerDashboardProps) {
-  const router = useRouter();
-  const [activeLayer, setActiveLayer] = useState<'home' | 'all_items' | 'rented' | 'maintenance' | 'history' | 'packages' | 'events'>('home');
-  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [sortBy, setSortBy] = useState<string>('name_asc');
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [selectedItemDetail, setSelectedItemDetail] = useState<Item | null>(null);
+export default function MultiLayerDashboard({
+  items,
+  categories,
+  histories,
+  packages,
+  masterCategories = [],
+  masterLabels = [],
+  initialEventDetails = [],
+}: MultiLayerDashboardProps) {
+  const [activeLayer, setActiveLayer] = useState<
+    "home" | "all_items" | "rented" | "maintenance" | "history" | "packages" | "events"
+  >("home");
 
-  // Pagination states
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [itemsPerPage, setItemsPerPage] = useState<number>(20);
-
-  // State untuk Fitur Edit & Delete History
-  const [editingHistory, setEditingHistory] = useState<History | null>(null);
-  const [deletingHistory, setDeletingHistory] = useState<History | null>(null);
-  const [isHistoryActionLoading, setIsHistoryActionLoading] = useState(false);
-  const [deletingPackage, setDeletingPackage] = useState<PackageTemplate | null>(null);
   const [addingToCartPkg, setAddingToCartPkg] = useState<PackageTemplate | null>(null);
   const [cartSuccessMsg, setCartSuccessMsg] = useState(false);
   const [addedItemName, setAddedItemName] = useState<string | null>(null);
-  const [copiedHistoryId, setCopiedHistoryId] = useState<string | null>(null);
-  const [copiedEventId, setCopiedEventId] = useState<string | null>(null);
-  const [copiedPackageId, setCopiedPackageId] = useState<string | null>(null);
-  
-  // State untuk Filtering & Kategorisasi Katalog Paket
-  const [selectedPkgCategory, setSelectedPkgCategory] = useState<string>('ALL');
-  const [selectedPkgLabels, setSelectedPkgLabels] = useState<string[]>([]);
-  const [pkgSearchQuery, setPkgSearchQuery] = useState<string>('');
-  const [isLabelDropdownOpen, setIsLabelDropdownOpen] = useState(false);
 
-  // Daftar Kategori Utama untuk Paket (Dari Master Data + Kategori Eksisting)
-  const packageCategoryTabs = useMemo(() => {
-    const catsFromMaster = masterCategories.map(c => c.name);
-    const fallbackCats = ['Audio', 'Lighting', 'Video', 'Stage', 'Backline'];
-    const baseCats = catsFromMaster.length > 0 ? catsFromMaster : fallbackCats;
-    const customCats = packages
-      .map(p => p.kategoriUtama?.trim())
-      .filter((cat): cat is string => Boolean(cat && !baseCats.some(bc => bc.toLowerCase() === cat.toLowerCase())));
-    const uniqueCustom = Array.from(new Set(customCats));
-    return ['ALL', ...baseCats, ...uniqueCustom];
-  }, [packages, masterCategories]);
+  // POS Cart Context
+  const { setExternalAddItem, setExternalPkgId } = usePosCart();
 
-  // Daftar Semua Label/Grade yang ada pada data paket + dari Master Data
-  const allAvailableLabels = useMemo(() => {
-    const set = new Set<string>();
-    if (masterLabels.length > 0) {
-      masterLabels.forEach(l => set.add(l.name));
-    } else {
-      ['Concert', 'Festival', 'Corporate', 'Grade A', 'Grade B', 'Outdoor', 'Indoor', 'Wedding'].forEach(l => set.add(l));
-    }
-    packages.forEach(p => {
-      if (Array.isArray(p.labelGrade)) {
-        p.labelGrade.forEach(l => {
-          if (l && l.trim()) set.add(l.trim());
-        });
-      }
-    });
-    return Array.from(set);
-  }, [packages, masterLabels]);
+  // Auth permissions
+  const { isAdmin, isDummyUser, demoModalOpen, setDemoModalOpen, demoModalContent, triggerDemoWarning } =
+    useAuthPermission();
 
-  // Hasil Filter Paket Rental
-  const filteredPackages = useMemo(() => {
-    return packages.filter(pkg => {
-      // 1. Filter Kategori Utama (Pills/Tabs)
-      if (selectedPkgCategory !== 'ALL') {
-        if (!pkg.kategoriUtama || pkg.kategoriUtama.toLowerCase() !== selectedPkgCategory.toLowerCase()) {
-          return false;
-        }
-      }
-
-      // 2. Filter Label / Grade (Multi-select Checkbox)
-      if (selectedPkgLabels.length > 0) {
-        const pkgLabels = Array.isArray(pkg.labelGrade) ? pkg.labelGrade : [];
-        const hasMatch = selectedPkgLabels.some(filterLabel =>
-          pkgLabels.some(l => l.toLowerCase() === filterLabel.toLowerCase())
-        );
-        if (!hasMatch) return false;
-      }
-
-      // 3. Filter Pencarian Cepat
-      if (pkgSearchQuery.trim()) {
-        const q = pkgSearchQuery.toLowerCase();
-        const matchName = pkg.name.toLowerCase().includes(q);
-        const matchDesc = (pkg.description || '').toLowerCase().includes(q);
-        const matchCat = (pkg.kategoriUtama || '').toLowerCase().includes(q);
-        const matchLabel = (pkg.labelGrade || []).some(l => l.toLowerCase().includes(q));
-        if (!matchName && !matchDesc && !matchCat && !matchLabel) return false;
-      }
-
-      return true;
-    });
-  }, [packages, selectedPkgCategory, selectedPkgLabels, pkgSearchQuery]);
-
-  // State untuk Sinkronisasi Data On Rented
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncToastMsg, setSyncToastMsg] = useState(false);
-
-  // Handler Sinkronisasi Data & Pembersihan Ghost Events
-  const handleSyncData = async () => {
-    if (isDummyUser) {
-      triggerDemoWarning('edit');
-      return;
-    }
-    setIsSyncing(true);
-    try {
-      const res = await syncActiveEvents();
-      if (res && res.success) {
-        router.refresh();
-        setSyncToastMsg(true);
-        setTimeout(() => setSyncToastMsg(false), 3000);
-      }
-    } catch (err) {
-      console.error("Gagal sinkronisasi data:", err);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-  
-  // Handler Salin Data Invoice ke Clipboard dalam Format Markdown
-  const handleCopyInvoice = async (hist: History) => {
-    try {
-      const text = generateMarkdownInvoice(hist, items);
-      await navigator.clipboard.writeText(text);
-      setCopiedHistoryId(hist.id);
-      setTimeout(() => {
-        setCopiedHistoryId(prev => (prev === hist.id ? null : prev));
-      }, 2000);
-    } catch (err) {
-      console.error("Gagal menyalin invoice ke clipboard", err);
-    }
-  };
-
-  // Handler Salin Data Event On Rented ke Clipboard dalam Format Markdown
-  const handleCopyEvent = async (event: History) => {
-    try {
-      const text = generateMarkdownEvent(event, items);
-      await navigator.clipboard.writeText(text);
-      setCopiedEventId(event.id);
-      setTimeout(() => {
-        setCopiedEventId(prev => (prev === event.id ? null : prev));
-      }, 2000);
-    } catch (err) {
-      console.error("Gagal menyalin event ke clipboard", err);
-    }
-  };
-
-  // Handler Salin Data Template Paket ke Clipboard dalam Format Markdown
-  const handleCopyPackage = async (pkg: PackageTemplate) => {
-    try {
-      const text = generateMarkdownPackage(pkg, items);
-      await navigator.clipboard.writeText(text);
-      setCopiedPackageId(pkg.id);
-      setTimeout(() => {
-        setCopiedPackageId(prev => (prev === pkg.id ? null : prev));
-      }, 2000);
-    } catch (err) {
-      console.error("Gagal menyalin paket ke clipboard", err);
-    }
-  };
-
-  // Handler Tambah Item ke POS Keranjang Kasir
+  // Handler Tambah Item ke POS Keranjang Kasir via Context
   const handleAddItemToCart = (item: Item) => {
     if (item.quantity <= 0) return;
-    window.dispatchEvent(new CustomEvent('add-to-pos-cart', { detail: { item, itemId: item.id } }));
+    setExternalAddItem(item);
     setAddedItemName(item.name);
     setCartSuccessMsg(true);
   };
-  
-  // State untuk Batch Update Kode
-  const [showBatchDialog, setShowBatchDialog] = useState(false);
-  const [isBatchLoading, setIsBatchLoading] = useState(false);
-
-  // State untuk Fitur Barcode Scanner Fisik
-  const [barcodeQuery, setBarcodeQuery] = useState("");
-  const barcodeInputRef = useRef<HTMLInputElement>(null);
-
-  // CEK PERMISSION CLIENT SIDE
-  const [isAdmin, setIsAdmin] = useState(false)
-  const [isDummyUser, setIsDummyUser] = useState(false)
-  const [demoModalOpen, setDemoModalOpen] = useState(false)
-  const [demoModalContent, setDemoModalContent] = useState<{ title: string; message: string }>({
-    title: DEMO_MESSAGES.default.title,
-    message: DEMO_MESSAGES.default.message,
-  })
-
-  const triggerDemoWarning = (type: keyof typeof DEMO_MESSAGES = 'default') => {
-    setDemoModalContent({
-      title: DEMO_MESSAGES[type].title,
-      message: DEMO_MESSAGES[type].message,
-    })
-    setDemoModalOpen(true)
-  }
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user?.email) {
-        setIsAdmin(isAdminEmail(data.user.email))
-        setIsDummyUser(isDemoEmail(data.user.email))
-      }
-    })
-  }, [])
-
-  // Temukan objek kategori saat ini
-  const currentCategoryObj = categories.find(c => c.id === selectedCategory);
-
-  // Reset filter kembali ke 'ALL' jika kategori yang terpilih terhapus dari database
-  useEffect(() => {
-    if (selectedCategory !== 'ALL' && !currentCategoryObj) {
-      setSelectedCategory('ALL');
-    }
-  }, [categories, selectedCategory, currentCategoryObj]);
-
-  // Reset pagination saat filter, pencarian, sort atau tab berubah
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [activeLayer, selectedCategory, searchQuery, sortBy]);
-
-  // --- LOGIKA PENCARIAN SUPER CERDAS ---
-  // Memfilter berdasarkan Label (Select Dropdown) DAN Teks Pencarian (Barang/Kode/Label)
-  const filteredItems = useMemo(() => {
-    return items.filter(item => {
-      const matchCategory = selectedCategory === 'ALL' || item.categories.some(c => c.id === selectedCategory);
-      const matchSearch = searchQuery === '' || 
-        item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        item.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.categories.some(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()));
-      return matchCategory && matchSearch;
-    });
-  }, [items, selectedCategory, searchQuery]);
-    
-  // Filter berdasarkan Tab Layer yang aktif (kecuali Home)
-  const itemsToDisplay = useMemo(() => {
-    let displayItems = filteredItems;
-    if (activeLayer === 'rented') displayItems = displayItems.filter(i => i.rentedQuantity > 0);
-    if (activeLayer === 'maintenance') displayItems = displayItems.filter(i => i.maintenanceQuantity > 0);
-
-    // --- LOGIKA PENGURUTAN (SORTING) ---
-    return [...displayItems].sort((a, b) => {
-      if (sortBy === 'name_asc') return a.name.localeCompare(b.name);
-      if (sortBy === 'name_desc') return b.name.localeCompare(a.name);
-      
-      if (sortBy === 'date_modified_desc') {
-        const dateA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
-        const dateB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
-        return dateB - dateA; // Terbaru di atas
-      }
-      
-      if (sortBy === 'date_modified_asc') {
-        const dateA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
-        const dateB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
-        return dateA - dateB; // Terlama di atas
-      }
-
-      // Dapatkan nilai kuantitas yang relevan dengan tab yang sedang aktif
-      const getQty = (item: Item) => {
-        if (activeLayer === 'rented') return item.rentedQuantity;
-        if (activeLayer === 'maintenance') return item.maintenanceQuantity;
-        return item.quantity + item.rentedQuantity + item.maintenanceQuantity;
-      };
-      
-      const qtyA = getQty(a);
-      const qtyB = getQty(b);
-      
-      if (sortBy === 'qty_highest') return qtyB - qtyA;
-      if (sortBy === 'qty_lowest') return qtyA - qtyB;
-      
-      if (sortBy === 'price_highest') return (b.price || 0) - (a.price || 0);
-      if (sortBy === 'price_lowest') return (a.price || 0) - (b.price || 0);
-      
-      return 0;
-    });
-  }, [filteredItems, activeLayer, sortBy]);
-
-  // --- LOGIKA PAGINATION ---
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = itemsToDisplay.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(itemsToDisplay.length / itemsPerPage);
-
-  const totalItems = items.length;
-
-  const { availableUnits, rentedUnits, maintenanceUnits, totalValuation } = useMemo(() => {
-    return items.reduce((acc, item) => {
-      const totalQty = item.quantity + item.rentedQuantity + item.maintenanceQuantity;
-      return {
-        availableUnits: acc.availableUnits + item.quantity,
-        rentedUnits: acc.rentedUnits + item.rentedQuantity,
-        maintenanceUnits: acc.maintenanceUnits + item.maintenanceQuantity,
-        totalValuation: acc.totalValuation + (totalQty * (item.price || 0))
-      };
-    }, { availableUnits: 0, rentedUnits: 0, maintenanceUnits: 0, totalValuation: 0 });
-  }, [items]);
-
-  // --- Active Events Logic (Dengan Proteksi Ghost Event) ---
-  const activeEvents = useMemo(() => {
-    return histories.filter(h => {
-      // 1. Validasi tipe dan status event
-      if (
-        h.type !== 'INVOICE_RENTAL' ||
-        !h.description?.includes('Event:') ||
-        h.description?.includes('[SELESAI]')
-      ) {
-        return false;
-      }
-
-      // 2. Proteksi UI: Cek apakah masih ada barang fisik yang belum dikembalikan (Rented > 0)
-      if (!h.payload) return false;
-      try {
-        const payload = JSON.parse(h.payload);
-        if (!Array.isArray(payload) || payload.length === 0) return false;
-
-        const activeItems = payload.filter((p: any) => {
-          const remainingQty = (Number(p.qty) || 0) - (Number(p.returnedQty) || 0);
-          const isPhysicalItem = p.code !== "LAYANAN" && !(p.id && String(p.id).startsWith("custom-"));
-          return isPhysicalItem && remainingQty > 0;
-        });
-
-        return activeItems.length > 0;
-      } catch {
-        return false;
-      }
-    });
-  }, [histories]);
 
   const TABS = [
-    { id: 'home', label: 'Home (Highlight)' },
-    { id: 'all_items', label: 'All Items' },
-    { id: 'rented', label: 'On Rented' },
-    { id: 'maintenance', label: 'Maintenance' },
-    { id: 'history', label: 'Riwayat Transaksi' },
-    { id: 'packages', label: 'Katalog Paket' },
-    { id: 'events', label: 'Event Management' },
+    { id: "home", label: "Home (Highlight)" },
+    { id: "all_items", label: "All Items" },
+    { id: "rented", label: "On Rented" },
+    { id: "maintenance", label: "Maintenance" },
+    { id: "history", label: "Riwayat Transaksi" },
+    { id: "packages", label: "Katalog Paket" },
+    { id: "events", label: "Event Management" },
   ] as const;
-
-  // FUNGSI AKSI HISTORY
-  const handleUpdateHistory = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (isDummyUser) {
-      setEditingHistory(null);
-      triggerDemoWarning('edit');
-      return;
-    }
-    if (!editingHistory) return;
-    setIsHistoryActionLoading(true);
-    const formData = new FormData(e.currentTarget);
-    await updateHistory(editingHistory.id, formData);
-    setIsHistoryActionLoading(false);
-    setEditingHistory(null);
-  }
-
-  const handleDeleteHistory = async () => {
-    if (isDummyUser) {
-      setDeletingHistory(null);
-      triggerDemoWarning('delete');
-      return;
-    }
-    if (!deletingHistory) return;
-    setIsHistoryActionLoading(true);
-    await deleteHistory(deletingHistory.id);
-    setIsHistoryActionLoading(false);
-    setDeletingHistory(null);
-  }
-
-  const handleDeletePackage = async () => {
-    if (isDummyUser) {
-      setDeletingPackage(null);
-      triggerDemoWarning('delete');
-      return;
-    }
-    if (!deletingPackage) return;
-    setIsHistoryActionLoading(true);
-    await deletePackageTemplate(deletingPackage.id);
-    setIsHistoryActionLoading(false);
-    setDeletingPackage(null);
-  }
-
-  const handleBatchRegenerate = async () => {
-    if (isDummyUser) {
-      setShowBatchDialog(false);
-      triggerDemoWarning('batch');
-      return;
-    }
-    setIsBatchLoading(true);
-    const res = await batchRegenerateCodes();
-    setIsBatchLoading(false);
-    if (res && res.success) {
-      setShowBatchDialog(false);
-    } else if (res && "error" in res) {
-      alert(res.error ?? "Gagal memperbarui kode masal.");
-    }
-  };
-
-  // --- FUNGSI HANDLE HARDWARE BARCODE SCANNER ---
-  const handleBarcodeScan = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      if (barcodeQuery.trim() !== '') {
-        setSearchQuery(barcodeQuery.trim()); // Jalankan filter pencarian utama
-        setBarcodeQuery(""); // Reset input text agar siap menerima scan berikutnya
-        setTimeout(() => barcodeInputRef.current?.focus(), 0); // Paksa fokus tetap berada di input barcode
-      }
-    }
-  };
 
   return (
     <div className="w-full">
       {/* Navigasi Tabs */}
       <div className="border-b border-zinc-800 mb-6">
         <nav className="flex gap-4 overflow-x-auto pb-1">
-          {TABS.map(tab => (
+          {TABS.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveLayer(tab.id)}
-              className={`py-3 px-4 whitespace-nowrap font-semibold text-sm transition-colors ${
+              className={`py-3 px-4 whitespace-nowrap font-semibold text-sm transition-colors cursor-pointer ${
                 activeLayer === tab.id
-                  ? 'border-b-2 border-zinc-100 text-zinc-100'
-                  : 'text-zinc-500 hover:text-zinc-300 border-b-2 border-transparent'
+                  ? "border-b-2 border-zinc-100 text-zinc-100"
+                  : "text-zinc-500 hover:text-zinc-300 border-b-2 border-transparent"
               }`}
             >
               {tab.label}
@@ -514,1099 +126,59 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
         </nav>
       </div>
 
-      {/* Layer 1: Home (Highlight) */}
-      {activeLayer === 'home' && (
-        <div className="space-y-6">
-          <h2 className="text-xl font-bold text-zinc-100">Ringkasan Sistem Logistik</h2>
-          
-          <div className="p-6 bg-zinc-900/40 border border-zinc-800 rounded-xl shadow-sm flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-zinc-500 mb-1">Total Valuasi Seluruh Aset</p>
-              <p className="truncate text-2xl font-bold text-blue-400 md:text-4xl">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(totalValuation)}</p>
-            </div>
-          </div>
+      {/* Layer 1: Home (Highlight) - Loaded directly without lazy delay */}
+      {activeLayer === "home" && <HighlightOverview items={items} />}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="p-6 bg-zinc-900/40 border border-zinc-800 rounded-xl shadow-sm">
-              <p className="text-sm font-medium text-zinc-500 mb-1">Total Jenis Aset</p>
-              <p className="text-3xl font-bold text-zinc-50">{totalItems}</p>
-            </div>
-            <div className="p-6 bg-zinc-900/40 border border-zinc-800 rounded-xl shadow-sm">
-              <p className="text-sm font-medium text-zinc-500 mb-1">Total Unit Tersedia</p>
-              <p className="text-3xl font-bold text-emerald-400">{availableUnits}</p>
-            </div>
-            <div className="p-6 bg-zinc-900/40 border border-zinc-800 rounded-xl shadow-sm">
-              <p className="text-sm font-medium text-zinc-500 mb-1">Total Unit Rented</p>
-              <p className="text-3xl font-bold text-amber-400">{rentedUnits}</p>
-            </div>
-            <div className="p-6 bg-zinc-900/40 border border-zinc-800 rounded-xl shadow-sm">
-              <p className="text-sm font-medium text-zinc-500 mb-1">Total Unit MT</p>
-              <p className="text-3xl font-bold text-red-500">{maintenanceUnits}</p>
-            </div>
-          </div>
-
-        </div>
+      {/* Layer 2: All Items (Inventaris Utama) */}
+      {activeLayer === "all_items" && (
+        <InventoryGrid
+          items={items}
+          categories={categories}
+          packages={packages}
+          isAdmin={isAdmin}
+          isDummyUser={isDummyUser}
+          onAddToCart={handleAddItemToCart}
+          onTriggerDemoWarning={triggerDemoWarning}
+        />
       )}
 
-      {/* Layer 2.5: Riwayat Transaksi */}
-      {activeLayer === 'history' && (
-        <div className="space-y-6">
-          <div className="flex items-center gap-3 border-b border-zinc-800 pb-4">
-            <HistoryIcon className="w-6 h-6 text-zinc-400" />
-            <h2 className="text-xl font-bold text-zinc-100">Catatan Riwayat & Invoice</h2>
-          </div>
-
-          {histories.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {histories.map((hist) => {
-                const payloadData = hist.payload ? JSON.parse(hist.payload) : [];
-                const totalTagihan = payloadData.reduce((acc: number, cur: any) => acc + (cur.price * cur.qty), 0);
-
-                return (
-                  <div key={hist.id} className="bg-zinc-900/40 border border-zinc-800 rounded-xl p-5 shadow-sm relative group">
-                    <div className="flex justify-between items-start gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 text-sm text-zinc-400 mb-2">
-                          <Calendar className="w-4 h-4 text-emerald-500 shrink-0" />
-                          <span className="truncate">{new Date(hist.date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
-                        </div>
-                        <h3 className="text-base font-bold text-zinc-100 mb-1 line-clamp-2">{hist.description}</h3>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0 md:opacity-0 opacity-100 group-hover:opacity-100 transition-opacity z-10">
-                        {/* Tombol Copy Clipboard */}
-                        <div className="relative">
-                          <button
-                            onClick={() => handleCopyInvoice(hist)}
-                            className={`p-2 rounded-md transition-all shadow-sm ${
-                              copiedHistoryId === hist.id
-                                ? "bg-emerald-950/80 border border-emerald-700 text-emerald-400"
-                                : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
-                            }`}
-                            title="Salin Data Invoice (Markdown)"
-                          >
-                            {copiedHistoryId === hist.id ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                          </button>
-                          {copiedHistoryId === hist.id && (
-                            <div className="absolute -bottom-8 right-0 bg-emerald-600 text-white text-[11px] font-semibold px-2 py-0.5 rounded shadow-lg whitespace-nowrap z-30 animate-in fade-in zoom-in-95 duration-150">
-                              Invoice disalin!
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Tombol Cetak Ulang hanya muncul untuk tipe Invoice Rental */}
-                        {hist.type === 'INVOICE_RENTAL' && (
-                          <ReprintInvoiceDialog history={hist}>
-                            <button className="p-2 bg-zinc-800 hover:bg-zinc-700 text-emerald-400 rounded-md transition-colors shadow-sm" title="Cetak Ulang Invoice">
-                              <Printer className="w-4 h-4" />
-                            </button>
-                          </ReprintInvoiceDialog>
-                        )}
-                        {(isAdmin || isDummyUser) && (
-                          <>
-                            <button onClick={() => setEditingHistory(hist)} className="p-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-md transition-colors shadow-sm" title="Ubah Catatan"><Pencil className="w-4 h-4" /></button>
-                            <button onClick={() => setDeletingHistory(hist)} className="p-2 bg-red-950/50 hover:bg-red-900 text-red-400 rounded-md transition-colors shadow-sm" title="Hapus Riwayat"><Trash2 className="w-4 h-4" /></button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <div className="mt-4 bg-zinc-950/50 rounded-lg p-2.5 border border-zinc-800/50 max-h-36 overflow-y-auto space-y-3">
-                      {groupItemsByPrimaryCategory(payloadData, items).map(group => (
-                        <div key={group.categoryName} className="w-full">
-                          <div className="w-full flex items-center gap-1.5 pb-1 mb-1.5 border-b border-zinc-800/80">
-                            <span className="w-1.5 h-3 bg-emerald-500 rounded-full shrink-0"></span>
-                            <span className="text-[10px] font-bold text-zinc-300 uppercase tracking-wider">
-                              {group.categoryName}
-                            </span>
-                            <span className="text-[9px] font-medium text-zinc-500 bg-zinc-900 px-1.5 py-0.2 rounded-full border border-zinc-800">
-                              {group.items.length}
-                            </span>
-                          </div>
-                          <div className="flex flex-col gap-1">
-                            {group.items.map((d: any, idx: number) => (
-                              <div key={d.lineId || idx} className="flex justify-between items-start text-xs py-1 border-b border-zinc-850/40 last:border-0 gap-2">
-                                <div className="flex flex-col min-w-0 flex-1">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="text-zinc-300 truncate font-medium">{d.name} <span className="text-zinc-600 font-mono">({d.code})</span></span>
-                                    {d.discount === 100 ? (
-                                      <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-1.5 py-0.2 rounded">FREE / Bonus</span>
-                                    ) : d.discount > 0 ? (
-                                      <span className="text-[9px] font-semibold text-amber-400 bg-amber-950/60 border border-amber-800/80 px-1.5 py-0.2 rounded">Disc {d.discount}%</span>
-                                    ) : null}
-                                  </div>
-                                  {d.footnote && <span className="text-[10px] text-zinc-500 italic truncate" title={d.footnote}>{d.footnote}</span>}
-                                </div>
-                                <span className="font-bold text-emerald-400 shrink-0 mt-0.5 text-[11px]">{d.qty} Unit × {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(d.price)}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    
-                    <div className="mt-4 pt-3 border-t border-zinc-800 flex justify-between items-center">
-                      <span className="text-xs text-zinc-500">Tercatat: {new Date(hist.createdAt).toLocaleTimeString('id-ID')}</span>
-                      <span className="text-sm font-bold text-zinc-100">Total: <span className="text-emerald-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(totalTagihan)}</span></span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="text-center py-16 text-zinc-500 bg-zinc-900/20 rounded-xl border border-zinc-800">
-              Belum ada catatan riwayat transaksi.
-            </div>
-          )}
-        </div>
+      {/* Layer 3: On Rented (Barang Keluar & Event Aktif) */}
+      {activeLayer === "rented" && (
+        <OnRentedTab
+          items={items}
+          categories={categories}
+          histories={histories}
+          isAdmin={isAdmin}
+          isDummyUser={isDummyUser}
+          onNavigateToEvents={() => setActiveLayer("events")}
+          onAddToCart={handleAddItemToCart}
+          onTriggerDemoWarning={triggerDemoWarning}
+        />
       )}
 
-      {/* Layer 2.6: Katalog Paket */}
-      {activeLayer === 'packages' && (
-        <div className="space-y-6">
-          {/* Header Katalog Paket */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
-            <div className="flex items-center gap-3">
-              <PackageSearch className="w-6 h-6 text-zinc-400" />
-              <div>
-                <h2 className="text-xl font-bold text-zinc-100">Katalog Paket Rental</h2>
-                <p className="text-xs text-zinc-400">Kelola dan telusuri template paket siap sewa berdasarkan kategori & grade.</p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-              <ManagePackageMasterDialog 
-                masterCategories={masterCategories} 
-                masterLabels={masterLabels} 
-              />
-              <div className="text-xs text-zinc-400 bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-lg flex items-center gap-2 shadow-sm">
-                <span>Total: <strong className="text-zinc-200">{packages.length}</strong> paket</span>
-                {(selectedPkgCategory !== 'ALL' || selectedPkgLabels.length > 0 || pkgSearchQuery) && (
-                  <>
-                    <span className="text-zinc-600">|</span>
-                    <span className="text-blue-400 font-medium">Filter: <strong>{filteredPackages.length}</strong> hasil</span>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Filter Bar Section */}
-          <div className="bg-zinc-900/40 border border-zinc-800 rounded-xl p-4 space-y-3.5">
-            {/* 1. Pill Buttons / Tabs untuk Kategori Utama */}
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Tag className="w-3.5 h-3.5 text-blue-400" /> Kategori Utama:
-                </span>
-                {(selectedPkgCategory !== 'ALL' || selectedPkgLabels.length > 0 || pkgSearchQuery) && (
-                  <button
-                    onClick={() => {
-                      setSelectedPkgCategory('ALL');
-                      setSelectedPkgLabels([]);
-                      setPkgSearchQuery('');
-                    }}
-                    className="text-xs text-zinc-400 hover:text-red-400 transition-colors flex items-center gap-1"
-                  >
-                    <X className="w-3 h-3" /> Reset Filter
-                  </button>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
-                {packageCategoryTabs.map((cat) => {
-                  const isActive = selectedPkgCategory.toLowerCase() === cat.toLowerCase();
-                  const count = cat === 'ALL'
-                    ? packages.length
-                    : packages.filter(p => (p.kategoriUtama || '').toLowerCase() === cat.toLowerCase()).length;
-
-                  return (
-                    <button
-                      key={cat}
-                      onClick={() => setSelectedPkgCategory(cat)}
-                      className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap flex items-center gap-1.5 shrink-0 cursor-pointer ${
-                        isActive
-                          ? "bg-blue-600 text-white shadow-md shadow-blue-900/40 font-semibold ring-1 ring-blue-400/50"
-                          : "bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
-                      }`}
-                    >
-                      <span>{cat === 'ALL' ? 'Semua Kategori' : cat}</span>
-                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                        isActive ? "bg-blue-700/90 text-blue-100" : "bg-zinc-800 text-zinc-500"
-                      }`}>
-                        {count}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 2. Cross-Filter Label/Grade & Quick Search */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-zinc-800/60">
-              <div className="flex flex-wrap items-center gap-2 relative">
-                {/* Dropdown Multi-Select Checkbox Filter Label / Grade */}
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setIsLabelDropdownOpen(!isLabelDropdownOpen)}
-                    className={`px-3 py-1.5 rounded-lg border text-xs font-medium flex items-center gap-2 transition-all cursor-pointer ${
-                      selectedPkgLabels.length > 0
-                        ? "bg-blue-950/70 border-blue-600 text-blue-300 shadow-sm shadow-blue-950"
-                        : "bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
-                    }`}
-                  >
-                    <Filter className="w-3.5 h-3.5 text-blue-400" />
-                    <span>Filter Label / Grade</span>
-                    {selectedPkgLabels.length > 0 && (
-                      <span className="bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full leading-none">
-                        {selectedPkgLabels.length}
-                      </span>
-                    )}
-                    <ChevronDown className={`w-3.5 h-3.5 text-zinc-500 transition-transform ${isLabelDropdownOpen ? "rotate-180" : ""}`} />
-                  </button>
-
-                  {/* Dropdown Menu Checkbox */}
-                  {isLabelDropdownOpen && (
-                    <>
-                      <div
-                        className="fixed inset-0 z-40"
-                        onClick={() => setIsLabelDropdownOpen(false)}
-                      />
-                      <div className="absolute top-full left-0 mt-1.5 w-64 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl p-3 z-50 space-y-2.5 animate-in fade-in zoom-in-95 duration-100">
-                        <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
-                          <span className="text-xs font-bold text-zinc-200">Cross-Filter Label</span>
-                          {selectedPkgLabels.length > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => setSelectedPkgLabels([])}
-                              className="text-[11px] text-zinc-400 hover:text-red-400 cursor-pointer"
-                            >
-                              Hapus Pilihan
-                            </button>
-                          )}
-                        </div>
-
-                        <div className="max-h-56 overflow-y-auto space-y-1 pr-1">
-                          {allAvailableLabels.length > 0 ? (
-                            allAvailableLabels.map((lbl) => {
-                              const isChecked = selectedPkgLabels.includes(lbl);
-                              const countInCat = packages.filter(p => {
-                                const matchCat = selectedPkgCategory === 'ALL' || (p.kategoriUtama || '').toLowerCase() === selectedPkgCategory.toLowerCase();
-                                const matchLbl = Array.isArray(p.labelGrade) && p.labelGrade.some(l => l.toLowerCase() === lbl.toLowerCase());
-                                return matchCat && matchLbl;
-                              }).length;
-
-                              return (
-                                <label
-                                  key={lbl}
-                                  className="flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-zinc-800 cursor-pointer text-xs transition-colors"
-                                >
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <input
-                                      type="checkbox"
-                                      checked={isChecked}
-                                      onChange={() => {
-                                        if (isChecked) {
-                                          setSelectedPkgLabels(selectedPkgLabels.filter(l => l !== lbl));
-                                        } else {
-                                          setSelectedPkgLabels([...selectedPkgLabels, lbl]);
-                                        }
-                                      }}
-                                      className="rounded border-zinc-700 bg-zinc-800 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5 accent-blue-600 cursor-pointer"
-                                    />
-                                    <span className={`truncate ${isChecked ? "text-blue-300 font-semibold" : "text-zinc-300"}`}>
-                                      {lbl}
-                                    </span>
-                                  </div>
-                                  <span className="text-[10px] text-zinc-500 shrink-0 ml-2">
-                                    {countInCat}
-                                  </span>
-                                </label>
-                              );
-                            })
-                          ) : (
-                            <div className="text-xs text-zinc-500 py-2 text-center">Belum ada label.</div>
-                          )}
-                        </div>
-
-                        <div className="pt-2 border-t border-zinc-800 flex justify-end">
-                          <button
-                            type="button"
-                            onClick={() => setIsLabelDropdownOpen(false)}
-                            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-md transition-colors cursor-pointer"
-                          >
-                            Terapkan
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {/* Badge Label Aktif */}
-                {selectedPkgLabels.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {selectedPkgLabels.map(lbl => (
-                      <span
-                        key={lbl}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-blue-950/80 border border-blue-700 text-blue-300 shadow-sm"
-                      >
-                        <span>{lbl}</span>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedPkgLabels(selectedPkgLabels.filter(l => l !== lbl))}
-                          className="hover:text-red-400 transition-colors cursor-pointer"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Input Pencarian Cepat */}
-              <div className="relative w-full sm:w-60">
-                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-                <input
-                  type="text"
-                  placeholder="Cari paket..."
-                  value={pkgSearchQuery}
-                  onChange={(e) => setPkgSearchQuery(e.target.value)}
-                  className="w-full pl-8 pr-7 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-blue-500 transition-colors"
-                />
-                {pkgSearchQuery && (
-                  <button
-                    onClick={() => setPkgSearchQuery('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 cursor-pointer"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Daftar Kartu Paket Rental */}
-          {filteredPackages.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredPackages.map((pkg) => {
-                const payloadData = pkg.payload ? JSON.parse(pkg.payload) : [];
-                
-                const totalPackageRent = payloadData.reduce((acc: number, pItem: any) => {
-                  const itemDetail = items.find(i => i.id === pItem.id);
-                  if (!itemDetail) return acc;
-                  const rentPrice = ((itemDetail.price || 0) * (itemDetail.rentPercentage || 0)) / 100;
-                  const discount = typeof pItem.discount === 'number' ? Math.max(0, Math.min(100, pItem.discount)) : 0;
-                  const netRentPrice = rentPrice * (1 - (discount / 100));
-                  return acc + (netRentPrice * pItem.qty);
-                }, 0);
-
-                const packageItems = payloadData
-                  .map((pItem: any) => {
-                    const itemDetail = items.find(i => i.id === pItem.id);
-                    if (!itemDetail) return null;
-                    return {
-                      ...itemDetail,
-                      lineId: pItem.lineId,
-                      pkgQty: pItem.qty,
-                      pkgFootnote: pItem.footnote,
-                      pkgDiscount: typeof pItem.discount === 'number' ? pItem.discount : 0,
-                    };
-                  })
-                  .filter((item: any): item is any => !!item);
-
-                return (
-                  <div key={pkg.id} className="bg-zinc-900/40 border border-zinc-800 rounded-xl p-5 shadow-sm flex flex-col relative group hover:border-zinc-700/80 transition-colors">
-                    {/* Header Kartu: Nama, Badge Kategori & Labels, Tombol Aksi */}
-                    <div className="flex justify-between items-start gap-4 mb-3">
-                      <div className="flex-1 min-w-0">
-                        <h3 className="text-lg font-bold text-blue-400 mb-1 line-clamp-2">{pkg.name}</h3>
-
-                        {/* Barisan Badge Kategori Utama & Label Grade */}
-                        <div className="flex flex-wrap items-center gap-1.5 my-2">
-                          {/* Badge Kategori Utama (Solid mencolok) */}
-                          {pkg.kategoriUtama ? (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-blue-600 text-white shadow-sm shadow-blue-900/50 tracking-wide uppercase">
-                              {pkg.kategoriUtama}
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-800/80 text-zinc-500 border border-zinc-700/40">
-                              Tanpa Kategori
-                            </span>
-                          )}
-
-                          {/* Badges Label / Grade (Badge kecil outline/pudar) */}
-                          {Array.isArray(pkg.labelGrade) && pkg.labelGrade.length > 0 && (
-                            pkg.labelGrade.map((lbl, idx) => (
-                              <span
-                                key={idx}
-                                className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-900 text-zinc-300 border border-zinc-700/60"
-                              >
-                                {lbl}
-                              </span>
-                            ))
-                          )}
-                        </div>
-
-                        <p className="text-xs text-zinc-500 line-clamp-2">{pkg.description || 'Tidak ada deskripsi paket.'}</p>
-                      </div>
-
-                      {(isAdmin || isDummyUser) && (
-                        <div className="flex gap-2 shrink-0 md:opacity-0 opacity-100 group-hover:opacity-100 transition-opacity z-10">
-                          <EditPackageDialog 
-                            pkg={pkg} 
-                            items={items} 
-                            masterCategories={masterCategories} 
-                            masterLabels={masterLabels} 
-                          />
-                          <button onClick={() => setDeletingPackage(pkg)} className="p-2 bg-red-950/50 hover:bg-red-900 text-red-400 rounded-md transition-colors shadow-sm cursor-pointer" title="Hapus Paket"><Trash2 className="w-4 h-4" /></button>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="bg-zinc-950/50 rounded-lg p-2.5 border border-zinc-800/50 max-h-44 overflow-y-auto mb-4 space-y-3">
-                      {groupItemsByPrimaryCategory(packageItems, items).map(group => (
-                        <div key={group.categoryName} className="w-full">
-                          <div className="w-full flex items-center gap-1.5 pb-1 mb-1.5 border-b border-zinc-800/80">
-                            <span className="w-1.5 h-3 bg-blue-500 rounded-full shrink-0"></span>
-                            <span className="text-[10px] font-bold text-blue-300 uppercase tracking-wider">
-                              {group.categoryName}
-                            </span>
-                            <span className="text-[9px] font-medium text-zinc-500 bg-zinc-900 px-1.5 py-0.2 rounded-full border border-zinc-800">
-                              {group.items.length}
-                            </span>
-                          </div>
-
-                          <div className="flex flex-col gap-1">
-                            {group.items.map((item: any, idx: number) => {
-                              const lineId = item.lineId;
-                              const pkgItemData = payloadData.find((p:any) => lineId ? p.lineId === lineId : p.id === item.id);
-                              const qty = item.pkgQty ?? pkgItemData?.qty ?? 0;
-                              const footnote = item.pkgFootnote ?? pkgItemData?.footnote;
-                              const discount = item.pkgDiscount ?? pkgItemData?.discount ?? 0;
-                              const rentPrice = ((item.price || 0) * (item.rentPercentage || 0)) / 100;
-
-                              const itemImage = item.imageUrl || pkgItemData?.imageUrl || items.find(i => i.id === item.id)?.imageUrl;
-
-                              return (
-                                <div key={lineId || `${item.id}-${idx}`} className="flex justify-between items-start text-xs py-1 border-b border-zinc-850/40 last:border-0 gap-2">
-                                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                                    {itemImage ? (
-                                       <div 
-                                         className="w-7 h-7 rounded border border-zinc-700 overflow-hidden shrink-0 cursor-pointer hover:opacity-75 transition-opacity"
-                                         onClick={() => setSelectedImage(itemImage)}
-                                         title="Lihat Foto"
-                                       >
-                                         <img src={itemImage} className="w-full h-full object-cover" alt="thumb" />
-                                       </div>
-                                    ) : (
-                                       <div className="w-7 h-7 rounded border border-zinc-800 bg-zinc-900 shrink-0 flex items-center justify-center text-[8px] text-zinc-600">
-                                          N/A
-                                       </div>
-                                    )}
-                                    <div className="flex flex-col min-w-0 flex-1">
-                                      <div className="flex items-center gap-1.5 flex-wrap">
-                                        <span className="text-zinc-300 truncate font-medium">{item.name}</span>
-                                        {discount === 100 ? (
-                                          <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-1.5 py-0.2 rounded">FREE / Bonus</span>
-                                        ) : discount > 0 ? (
-                                          <span className="text-[9px] font-semibold text-amber-400 bg-amber-950/60 border border-amber-800/80 px-1.5 py-0.2 rounded">Disc {discount}%</span>
-                                        ) : null}
-                                      </div>
-                                      {footnote && (
-                                        <span className="text-[10px] text-zinc-500 italic truncate" title={footnote}>{footnote}</span>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <div className="flex flex-col items-end shrink-0">
-                                    <span className="font-bold text-zinc-400 bg-zinc-900 px-2 py-0.5 rounded text-[11px] mt-0.5">{qty} Unit</span>
-                                    {discount > 0 ? (
-                                      <span className="text-[10px] text-zinc-500 line-through mt-0.5">
-                                        {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(rentPrice * qty)}
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="mt-auto pt-4 border-t border-zinc-800 flex justify-between items-center">
-                      <div>
-                        <span className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Total Harga Sewa</span>
-                        <span className="text-lg font-bold text-emerald-400 leading-none">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(totalPackageRent)}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="relative">
-                          <button
-                            onClick={() => handleCopyPackage(pkg)}
-                            className={`p-2 rounded-md transition-all shadow-sm cursor-pointer ${
-                              copiedPackageId === pkg.id
-                                ? "bg-blue-950/80 border border-blue-700 text-blue-400"
-                                : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
-                            }`}
-                            title="Salin Data Paket (Markdown)"
-                          >
-                            {copiedPackageId === pkg.id ? <Check className="w-4 h-4 text-blue-400" /> : <Copy className="w-4 h-4" />}
-                          </button>
-                          {copiedPackageId === pkg.id && (
-                            <div className="absolute -bottom-8 right-0 bg-blue-600 text-white text-[11px] font-semibold px-2 py-0.5 rounded shadow-lg whitespace-nowrap z-30 animate-in fade-in zoom-in-95 duration-150">
-                              Tersalin!
-                            </div>
-                          )}
-                        </div>
-                        <PrintPackageDialog pkg={pkg} items={items} />
-                        <button
-                          onClick={() => setAddingToCartPkg(pkg)}
-                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-sm font-medium transition-colors flex items-center gap-2 shadow-sm cursor-pointer"
-                        >
-                          <ShoppingCart className="w-4 h-4 shrink-0" />
-                          <span className="hidden sm:inline">Ke Keranjang</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : packages.length > 0 ? (
-            <div className="text-center py-16 text-zinc-400 bg-zinc-900/20 rounded-xl border border-zinc-800 p-8 space-y-3">
-              <Filter className="w-8 h-8 text-zinc-600 mx-auto" />
-              <h3 className="text-base font-semibold text-zinc-300">Tidak ada paket yang cocok</h3>
-              <p className="text-xs text-zinc-500 max-w-sm mx-auto">
-                Tidak ada paket rental yang memenuhi kriteria filter kategori utama dan label yang Anda pilih.
-              </p>
-              <button
-                onClick={() => {
-                  setSelectedPkgCategory('ALL');
-                  setSelectedPkgLabels([]);
-                  setPkgSearchQuery('');
-                }}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-blue-400 rounded-lg text-xs font-semibold transition-colors mt-2 cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" /> Reset Semua Filter
-              </button>
-            </div>
-          ) : (
-            <div className="text-center py-16 text-zinc-500 bg-zinc-900/20 rounded-xl border border-zinc-800">
-              Belum ada template paket yang dibuat. Silakan buat melalui tombol "Bikin Paket".
-            </div>
-          )}
-        </div>
+      {/* Layer 4: Maintenance */}
+      {activeLayer === "maintenance" && (
+        <MaintenanceTable items={items} categories={categories} />
       )}
 
-      {/* Layer 3: Data Barang (All, Rented, Maintenance) */}
-      {activeLayer !== 'home' && activeLayer !== 'history' && activeLayer !== 'packages' && activeLayer !== 'events' && (
-        <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <h2 className="text-xl font-bold text-zinc-100">
-              {activeLayer === 'all_items' && 'Semua Barang'}
-              {activeLayer === 'rented' && 'Barang Sedang Keluar (Rented)'}
-              {activeLayer === 'maintenance' && 'Barang Dalam Pemeliharaan'}
-            </h2>
-            
-            {/* Fitur Filter Kategori */}
-            <div className="flex items-center gap-3 bg-zinc-900/50 p-2 px-3 rounded-lg border border-zinc-800 shadow-sm flex-wrap">
-              <Search className="w-4 h-4 text-zinc-500" />
-              <input
-                type="text"
-                placeholder="Cari barang atau label..."
-                className="bg-transparent border-none outline-none text-sm text-zinc-100 placeholder:text-zinc-600 w-32 focus:w-48 transition-all"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              <div className="w-px h-4 bg-zinc-700 mx-1"></div>
-
-              {/* --- INPUT BARCODE SCANNER --- */}
-              <div className="flex items-center gap-2 bg-zinc-950 px-2 py-1 rounded border border-zinc-700 focus-within:border-emerald-500/50 transition-colors" title="Arahkan kursor ke sini untuk menggunakan Barcode Scanner fisik">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-emerald-500"><path d="M3 5v14"/><path d="M8 5v14"/><path d="M12 5v14"/><path d="M17 5v14"/><path d="M21 5v14"/></svg>
-                <input
-                  ref={barcodeInputRef}
-                  type="text"
-                  placeholder="Scan Barcode..."
-                  className="bg-transparent border-none outline-none text-sm text-emerald-400 placeholder:text-zinc-600 w-28 focus:w-36 transition-all font-mono"
-                  value={barcodeQuery}
-                  onChange={(e) => setBarcodeQuery(e.target.value)}
-                  onKeyDown={handleBarcodeScan}
-                />
-              </div>
-              <div className="w-px h-4 bg-zinc-700 mx-1 hidden sm:block"></div>
-
-              <select
-                id="categoryFilter"
-                className="bg-zinc-950 text-zinc-100 text-sm border border-zinc-700 rounded-md outline-none focus:ring-1 focus:ring-zinc-500 cursor-pointer p-1.5 max-w-[140px] truncate"
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-              >
-                <option value="ALL">-- Semua Label --</option>
-                {categories.map(category => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-              
-              <div className="w-px h-4 bg-zinc-700 mx-1"></div>
-              
-              <ArrowUpDown className="w-4 h-4 text-zinc-500 hidden sm:block" />
-              <select
-                className="bg-zinc-950 text-zinc-100 text-sm border border-zinc-700 rounded-md outline-none focus:ring-1 focus:ring-zinc-500 cursor-pointer p-1.5"
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-              >
-                <option value="name_asc">Abjad (A-Z)</option>
-                <option value="name_desc">Abjad (Z-A)</option>
-                <option value="qty_highest">Terbanyak</option>
-                <option value="qty_lowest">Paling Sedikit</option>
-                <option value="date_modified_desc">Terbaru Diubah</option>
-                <option value="date_modified_asc">Terlama Diubah</option>
-                <option value="price_highest">Harga Tertinggi</option>
-                <option value="price_lowest">Harga Terendah</option>
-              </select>
-
-              {(isAdmin || isDummyUser) && <AddCategoryDialog />}
-              
-              {/* Tombol Aksi Kategori hanya muncul jika filter bukan 'ALL' */}
-              {(isAdmin || isDummyUser) && selectedCategory !== 'ALL' && currentCategoryObj && (
-                <>
-                  <EditCategoryDialog category={currentCategoryObj} />
-                  <DeleteCategoryDialog category={currentCategoryObj} />
-                </>
-              )}
-              
-              {/* Tombol Rincian Rental Khusus di Tab On Rented */}
-              {activeLayer === 'rented' && (
-                <>
-                  <div className="w-px h-4 bg-zinc-700 mx-1 hidden sm:block"></div>
-                  <button
-                    onClick={handleSyncData}
-                    disabled={isSyncing}
-                    className="flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-3 py-1.5 rounded-md text-sm font-medium transition-colors border border-zinc-700 shadow-sm whitespace-nowrap disabled:opacity-50"
-                    title="Sinkronisasi Data & Bersihkan Ghost Events"
-                  >
-                    <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin text-amber-400" : "text-zinc-400"}`} />
-                    <span>{isSyncing ? "Menyinkronkan..." : "Sinkronisasi Data"}</span>
-                  </button>
-                  <ReturnRentalDialog items={itemsToDisplay} />
-                  <RentalInvoiceDialog items={itemsToDisplay} />
-                </>
-              )}
-
-              {/* TAMPILKAN TOMBOL BATCH RAPIKAN KODE JIKA DI TAB ALL ITEMS */}
-              {(isAdmin || isDummyUser) && activeLayer === 'all_items' && (
-                <>
-                  <div className="w-px h-4 bg-zinc-700 mx-1 hidden sm:block"></div>
-                  <button
-                    onClick={() => setShowBatchDialog(true)}
-                    className="flex items-center gap-2 bg-indigo-950/50 text-indigo-400 hover:bg-indigo-900 px-3 py-1.5 rounded-md text-sm font-medium transition-colors border border-indigo-900 shadow-sm whitespace-nowrap"
-                  >
-                    Rapikan Semua Kode
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Tampilan Khusus Grouping Event di Tab Rented */}
-          {activeLayer === 'rented' && activeEvents.length > 0 && (
-            <div className="mb-10 space-y-4">
-              <h3 className="text-lg font-bold text-zinc-100 flex items-center gap-2 border-b border-zinc-800 pb-2"><Calendar className="w-5 h-5 text-amber-400" /> Daftar Event / Acara Aktif</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {activeEvents.map(event => {
-                  const payload = event.payload ? JSON.parse(event.payload) : [];
-                  // Saring item yang belum dikembalikan, dan abaikan layanan tambahan
-                  const activeItems = payload.filter((p: any) => 
-                    (p.qty - (p.returnedQty || 0)) > 0 && 
-                    p.code !== "LAYANAN" && 
-                    !(p.id && p.id.startsWith("custom-"))
-                  );
-                  if (activeItems.length === 0) return null; // Fallback aman jika semua barang fisik sudah kembali
-
-                  return (
-                    <div key={event.id} className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-5 flex flex-col shadow-sm group relative">
-                      <div className="flex justify-between items-start gap-2 mb-4">
-                        <div className="min-w-0 flex-1">
-                          <h4 className="font-bold text-amber-400 mb-1 line-clamp-1" title={event.description || ""}>{event.description?.split('|')[0].replace('Event:', '').trim()}</h4>
-                          <p className="text-xs text-zinc-500">{new Date(event.date).toLocaleDateString('id-ID', { dateStyle: 'full' })}</p>
-                        </div>
-                        <div className="relative shrink-0">
-                          <button
-                            onClick={() => handleCopyEvent(event)}
-                            className={`p-2 rounded-md transition-all shadow-sm ${
-                              copiedEventId === event.id
-                                ? "bg-amber-950/80 border border-amber-700 text-amber-400"
-                                : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
-                            }`}
-                            title="Salin Data Event (Markdown)"
-                          >
-                            {copiedEventId === event.id ? <Check className="w-4 h-4 text-amber-400" /> : <Copy className="w-4 h-4" />}
-                          </button>
-                          {copiedEventId === event.id && (
-                            <div className="absolute -bottom-8 right-0 bg-amber-600 text-white text-[11px] font-semibold px-2 py-0.5 rounded shadow-lg whitespace-nowrap z-30 animate-in fade-in zoom-in-95 duration-150">
-                              Tersalin!
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div className="flex-1 mb-4 space-y-3">
-                        {groupItemsByPrimaryCategory(activeItems, items).map(group => (
-                          <div key={group.categoryName} className="w-full">
-                            <div className="w-full flex items-center gap-1.5 pb-1 mb-1.5 border-b border-zinc-800/80">
-                              <span className="w-1.5 h-3 bg-amber-400 rounded-full shrink-0"></span>
-                              <span className="text-[10px] font-bold text-amber-300 uppercase tracking-wider">
-                                {group.categoryName}
-                              </span>
-                              <span className="text-[9px] font-medium text-zinc-500 bg-zinc-900 px-1.5 py-0.2 rounded-full border border-zinc-800">
-                                {group.items.length}
-                              </span>
-                            </div>
-
-                            <div className="flex flex-col gap-1">
-                              {group.items.map((p: any, idx: number) => {
-                                const realItem = items.find(i => i.id === p.id || i.code === p.code);
-                                const isCustom = p.code === "LAYANAN" || (p.id && String(p.id).startsWith("custom-"));
-                                const itemNote = p.catatan || p.footnote;
-                                return (
-                                  <div key={idx} className="flex justify-between items-center text-xs py-1 border-b border-zinc-850/40 last:border-0 gap-2">
-                                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                                      {isCustom ? (
-                                        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded bg-blue-950/40 border border-blue-800/40 flex items-center justify-center shrink-0 text-blue-400">
-                                          <PlusCircle className="w-3.5 h-3.5" />
-                                        </div>
-                                      ) : (
-                                        <ItemThumbnail
-                                          src={realItem?.imageUrl || p.imageUrl}
-                                          alt={p.name}
-                                          className="w-7 h-7 sm:w-8 sm:h-8 rounded shrink-0"
-                                          iconClassName="w-3.5 h-3.5 text-zinc-500"
-                                        />
-                                      )}
-                                      <div className="flex flex-col min-w-0 flex-1">
-                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                          <span className="text-zinc-300 truncate font-medium">{p.name}</span>
-                                          {p.discount === 100 ? (
-                                            <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-1 py-0.2 rounded">FREE / Bonus</span>
-                                          ) : p.discount > 0 ? (
-                                            <span className="text-[9px] font-semibold text-amber-400 bg-amber-950/60 border border-amber-800/80 px-1 py-0.2 rounded">Disc {p.discount}%</span>
-                                          ) : null}
-                                        </div>
-                                        {itemNote && (
-                                          <span className="text-[11px] text-zinc-400 italic truncate" title={itemNote}>
-                                            {itemNote}
-                                          </span>
-                                        )}
-                                      </div>
-                                    </div>
-                                    <span className="text-amber-400 font-bold shrink-0 bg-amber-950/40 border border-amber-900/40 px-2 py-0.5 rounded text-[11px]">
-                                      {p.qty - (p.returnedQty || 0)} Unit
-                                    </span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="mt-auto grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <button className="flex h-full w-full items-center justify-center gap-1.5 rounded-md border border-zinc-700 bg-zinc-800 py-1.5 px-2 text-xs sm:text-sm font-medium text-zinc-300 shadow-sm transition-colors hover:bg-zinc-700">
-                               <Eye className="w-4 h-4 shrink-0" /> <span className="inline">Rincian</span>
-                            </button>
-                          </DialogTrigger>
-                          <DialogContent aria-describedby={undefined} className="bg-zinc-950 border-zinc-800 text-zinc-50 max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
-                             <DialogHeader className="shrink-0 border-b border-zinc-800 pb-4">
-                               <DialogTitle>
-                                 Rincian Event: <span className="text-amber-400">{event.description?.split('|')[0].replace('Event:', '').trim()}</span>
-                               </DialogTitle>
-                             </DialogHeader>
-                             <div className="flex-1 overflow-y-auto space-y-4 pr-2 py-2">
-                               {groupItemsByPrimaryCategory(payload, items).map(group => (
-                                 <div key={group.categoryName} className="w-full">
-                                   {/* Section Header Kategori Utama Event */}
-                                   <div className="w-full flex items-center gap-2 pb-1.5 mb-2.5 border-b border-zinc-800">
-                                     <span className="w-1.5 h-3.5 bg-amber-400 rounded-full shrink-0"></span>
-                                     <h4 className="text-xs font-bold text-zinc-200 uppercase tracking-wider">
-                                       {group.categoryName}
-                                     </h4>
-                                     <span className="text-[10px] font-semibold text-zinc-400 bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded-full">
-                                       {group.items.length} {group.items.length > 1 ? "items" : "item"}
-                                     </span>
-                                   </div>
-
-                                   <div className="flex flex-col gap-2.5">
-                                     {group.items.map((pItem: any, idx: number) => {
-                                        const realItem = items.find(i => i.id === pItem.id || i.code === pItem.code);
-                                        const isCustom = pItem.code === "LAYANAN" || (pItem.id && String(pItem.id).startsWith("custom-"));
-                                        const modalItemNote = pItem.catatan || pItem.footnote;
-                                        return (
-                                           <div key={idx} className="flex gap-3 sm:gap-4 p-2.5 sm:p-3 bg-zinc-900/50 border border-zinc-800 rounded-lg items-center">
-                                              {isCustom ? (
-                                                <div className="w-12 h-12 sm:w-14 sm:h-14 shrink-0 bg-blue-950/40 border border-blue-800/50 rounded-lg flex items-center justify-center text-blue-400">
-                                                  <PlusCircle className="w-6 h-6" />
-                                                </div>
-                                              ) : (
-                                                <ItemThumbnail
-                                                  src={realItem?.imageUrl || pItem.imageUrl}
-                                                  alt={pItem.name}
-                                                  className="w-12 h-12 sm:w-14 sm:h-14 shrink-0 rounded-lg"
-                                                  iconClassName="w-5 h-5 text-zinc-500"
-                                                />
-                                              )}
-                                              <div className="flex-1 min-w-0 flex flex-col justify-center">
-                                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                                   <h5 className="font-bold text-sm text-zinc-100 truncate">{pItem.name}</h5>
-                                                   {pItem.discount === 100 ? (
-                                                     <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-1.5 py-0.5 rounded">FREE / Bonus</span>
-                                                   ) : pItem.discount > 0 ? (
-                                                     <span className="text-[10px] font-semibold text-amber-400 bg-amber-950/60 border border-amber-800/80 px-1.5 py-0.5 rounded">Disc {pItem.discount}%</span>
-                                                   ) : null}
-                                                 </div>
-                                                 <p className="text-xs text-zinc-500 font-mono">{pItem.code}</p>
-                                                 {modalItemNote && <p className="text-[10px] text-zinc-400 italic mt-0.5 truncate" title={modalItemNote}>{modalItemNote}</p>}
-                                                 {(pItem.returnedQty > 0) && (
-                                                    <p className="text-[10px] font-bold text-amber-500 mt-1 bg-amber-950/30 w-max px-1.5 py-0.5 rounded">Kembali: {pItem.returnedQty} / {pItem.qty}</p>
-                                                 )}
-                                              </div>
-                                              <div className="text-right shrink-0 flex flex-col justify-center">
-                                                 <p className="text-xs text-zinc-400 mb-0.5">{pItem.qty} Unit × {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(pItem.price)}</p>
-                                                 <p className="font-bold text-sm text-emerald-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(pItem.qty * pItem.price)}</p>
-                                              </div>
-                                           </div>
-                                        )
-                                     })}
-                                   </div>
-                                 </div>
-                               ))}
-                             </div>
-                             <div className="shrink-0 mt-2 pt-4 border-t border-zinc-800 flex justify-between items-center bg-zinc-900/40 p-4 rounded-xl border">
-                               <span className="text-sm font-medium text-zinc-400">Total Harga Sewa Keseluruhan:</span>
-                               <span className="text-xl font-bold text-emerald-400">
-                                 {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(payload.reduce((acc: number, cur: any) => acc + (cur.qty * cur.price), 0))}
-                               </span>
-                             </div>
-                          </DialogContent>
-                        </Dialog>
-
-                        {(isAdmin || isDummyUser) && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const cleanName = event.description?.split('|')[0].replace('Event:', '').trim() || "Event";
-                              window.dispatchEvent(new CustomEvent('open-addon-rental', {
-                                detail: {
-                                  eventId: event.id,
-                                  eventName: cleanName
-                                }
-                              }));
-                            }}
-                            className="flex h-full w-full items-center justify-center gap-1.5 rounded-md border border-emerald-800/80 bg-emerald-950/40 py-1.5 px-2 text-xs sm:text-sm font-medium text-emerald-400 shadow-sm transition-colors hover:bg-emerald-900/60 hover:text-emerald-300"
-                            title="Tambah Barang Susulan ke Event Ini"
-                          >
-                            <Plus className="w-4 h-4 shrink-0" /> <span className="inline">Tambah Barang</span>
-                          </button>
-                        )}
-
-                        <div className="flex w-full [&_button]:w-full">
-                          <ReturnRentalDialog items={itemsToDisplay} activeEvent={event} />
-                        </div>
-                      </div>
-
-                      <div className="mt-2 pt-2 border-t border-zinc-800/80">
-                        <button
-                          type="button"
-                          onClick={() => setActiveLayer('events')}
-                          className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 bg-blue-950/40 hover:bg-blue-900/60 text-blue-400 border border-blue-800/50 rounded-md text-xs font-semibold transition-all shadow-sm cursor-pointer"
-                        >
-                          <Calendar className="w-3.5 h-3.5" />
-                          <span>Buka di Event Management</span>
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {activeLayer === 'rented' && <h3 className="text-lg font-bold text-zinc-100 flex items-center gap-2 border-b border-zinc-800 pb-2 mb-4 mt-6">Akumulasi Seluruh Barang Keluar (Flat List)</h3>}
-
-          {/* Render Tabel/List Data Barang */}
-          {itemsToDisplay.length > 0 ? (
-            <>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
-                {currentItems.map(item => (
-                <div key={item.id} className="rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/60 transition-all flex flex-col min-h-[250px] sm:min-h-[320px] overflow-hidden shadow-lg">
-                  <div className="h-32 sm:h-48 w-full bg-zinc-950/50 relative group overflow-hidden border-b border-zinc-800">
-                    {item.imageUrl ? (
-                      <img 
-                        src={item.imageUrl} 
-                        alt={item.name} 
-                        onClick={() => setSelectedImage(item.imageUrl!)}
-                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 cursor-pointer" 
-                      />
-                    ) : (
-                      <div className="w-full h-full flex flex-col items-center justify-center text-zinc-700">
-                        <span className="text-xs font-bold uppercase tracking-widest border border-zinc-800 px-3 py-1 rounded-full">No Image</span>
-                      </div>
-                    )}
-                    <div className="absolute top-3 left-3 flex flex-wrap gap-1 max-w-[70%]">
-                      {item.categories?.map(cat => (
-                        <span key={cat.id} className="inline-flex items-center rounded-md bg-zinc-950/80 px-1.5 py-0.5 sm:px-2.5 sm:py-1 text-[8px] sm:text-[10px] font-bold uppercase tracking-wider text-zinc-300 ring-1 ring-inset ring-zinc-700/50 backdrop-blur-sm">
-                          {cat.name}
-                        </span>
-                      ))}
-                    </div>
-                <div className="absolute top-2 right-2 sm:top-3 sm:right-3 flex flex-col gap-1 items-end">
-                  {item.quantity > 0 && (
-                    <span className="text-[8px] sm:text-[10px] font-bold uppercase px-1.5 sm:px-2 py-0.5 rounded tracking-wider shadow-lg backdrop-blur-md bg-emerald-950/80 text-emerald-400 ring-1 ring-emerald-500/30"><span className="hidden sm:inline">Tersedia: </span>{item.quantity}</span>
-                  )}
-                  {item.rentedQuantity > 0 && (
-                    <span className="text-[8px] sm:text-[10px] font-bold uppercase px-1.5 sm:px-2 py-0.5 rounded tracking-wider shadow-lg backdrop-blur-md bg-amber-950/80 text-amber-400 ring-1 ring-amber-500/30"><span className="hidden sm:inline">Keluar: </span>{item.rentedQuantity}</span>
-                  )}
-                  {item.maintenanceQuantity > 0 && (
-                    <span className="text-[8px] sm:text-[10px] font-bold uppercase px-1.5 sm:px-2 py-0.5 rounded tracking-wider shadow-lg backdrop-blur-md bg-red-950/80 text-red-400 ring-1 ring-red-500/30">MT: {item.maintenanceQuantity}</span>
-                  )}
-                    </div>
-                  </div>
-
-                  <div className="p-3 sm:p-5 flex flex-col flex-1">
-                    <h2 
-                      className="text-base sm:text-xl font-bold truncate text-zinc-100 cursor-pointer hover:text-blue-400 transition-colors"
-                      onClick={() => setSelectedItemDetail(item)}
-                      title="Lihat Detail"
-                    >
-                      {item.name}
-                    </h2>
-                    <p className="text-xs sm:text-sm font-mono text-zinc-500 mb-2 sm:mb-3">{item.code}</p>
-                    <p className="text-xs sm:text-sm text-zinc-400 line-clamp-2 mb-2 hidden sm:block">{item.description || "Tidak ada deskripsi."}</p>
-                    
-                    {item.createdAt ? (
-                      <p className="text-[9px] sm:text-[11px] text-zinc-500 mb-2 sm:mb-4 font-medium hidden sm:block">
-                        Ditambahkan: {new Date(item.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
-                      </p>
-                    ) : (
-                      <div className="mb-2 sm:mb-4 hidden sm:block"></div>
-                    )}
-                    
-                    <div className="bg-zinc-950/50 rounded-lg p-2 sm:p-3 mb-3 sm:mb-4 border border-zinc-800/50">
-                      <p className="text-[10px] sm:text-xs font-semibold text-zinc-400 border-b border-zinc-800/50 pb-1 mb-1.5 sm:mb-2">Valuasi Item</p>
-                      <div className="flex justify-between items-center mb-1">
-                        <p className="text-[9px] sm:text-[11px] text-zinc-500">Satuan</p>
-                        <p className="text-[10px] sm:text-xs font-medium text-zinc-300">
-                          {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.price || 0)}
-                        </p>
-                      </div>
-                      <div className="flex justify-between items-center mb-1 hidden sm:flex">
-                        <p className="text-[9px] sm:text-[11px] text-zinc-500">Total</p>
-                        <p className="text-[10px] sm:text-xs font-bold text-blue-400">
-                          {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format((item.quantity + item.rentedQuantity + item.maintenanceQuantity) * (item.price || 0))}
-                        </p>
-                      </div>
-                      <div className="flex justify-between items-center mt-1 sm:mt-0">
-                        <p className="text-[9px] sm:text-[11px] text-zinc-500">Sewa <span className="hidden sm:inline">({item.rentPercentage || 0}%)</span></p>
-                        <p className="text-xs sm:text-sm font-bold text-emerald-400">
-                          {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(((item.price || 0) * (item.rentPercentage || 0)) / 100)}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col-reverse sm:flex-row justify-between items-start sm:items-end border-t border-zinc-800/50 pt-3 sm:pt-4 mt-auto gap-3 sm:gap-0">
-                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
-                        <button 
-                          onClick={() => setSelectedItemDetail(item)}
-                          className="flex items-center justify-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors border border-zinc-700 shadow-sm"
-                        >
-                          <Eye className="w-3.5 h-3.5" /> <span className="inline">Detail</span>
-                        </button>
-                        <button 
-                          type="button"
-                          onClick={() => handleAddItemToCart(item)}
-                          disabled={item.quantity <= 0}
-                          title={item.quantity > 0 ? `Tambah ${item.name} ke Keranjang Kasir` : "Stok gudang tidak tersedia"}
-                          className={`flex items-center justify-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors border shadow-sm ${
-                            item.quantity > 0
-                              ? "bg-emerald-950/50 hover:bg-emerald-900/80 text-emerald-400 border-emerald-800/80 hover:text-emerald-300 cursor-pointer"
-                              : "bg-zinc-900/40 text-zinc-600 border-zinc-800/40 cursor-not-allowed opacity-40"
-                          }`}
-                        >
-                          <ShoppingCart className="w-3.5 h-3.5" />
-                          <span className="inline">Keranjang</span>
-                        </button>
-                        {(isAdmin || isDummyUser) && (
-                          <>
-                            <EditItemDialog item={item} allCategories={categories} />
-                            <DeleteItemDialog item={item} />
-                            <AddToPackageDialog item={item} packages={packages} />
-                          </>
-                        )}
-                      </div>
-                      <div className="flex items-center sm:block w-full justify-between sm:text-right">
-                        <p className="text-[10px] sm:text-[10px] font-bold text-zinc-500 uppercase tracking-wider block sm:hidden">
-                          {activeLayer === 'all_items' ? 'Total Unit' : 'Unit'}:
-                        </p>
-                        <div className="flex flex-col items-end">
-                          <p className="text-xl sm:text-3xl font-black leading-none text-zinc-50">
-                            {activeLayer === 'rented' ? item.rentedQuantity : 
-                             activeLayer === 'maintenance' ? item.maintenanceQuantity : 
-                             (item.quantity + item.rentedQuantity + item.maintenanceQuantity)}
-                          </p>
-                          <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mt-1 hidden sm:block">
-                            {activeLayer === 'all_items' ? 'Total Unit' : 'Unit'}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              </div>
-
-              {/* Pagination Controls */}
-              <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-8 border-t border-zinc-800 pt-6">
-                <div className="flex items-center gap-2 text-sm text-zinc-400">
-                  <span>Menampilkan</span>
-                  <select
-                    value={itemsPerPage}
-                    onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
-                    className="bg-zinc-950 border border-zinc-700 rounded px-2 py-1 text-zinc-100 outline-none focus:ring-1 focus:ring-zinc-500 cursor-pointer"
-                  >
-                    <option value={20}>20</option>
-                    <option value={30}>30</option>
-                    <option value={40}>40</option>
-                    <option value={50}>50</option>
-                  </select>
-                  <span>dari {itemsToDisplay.length} aset</span>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-md text-sm text-zinc-300 hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                    Sebelumnya
-                  </button>
-                  <span className="text-sm text-zinc-400 px-2 font-medium">
-                    Halaman {currentPage} dari {totalPages}
-                  </span>
-                  <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage >= totalPages} className="px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-md text-sm text-zinc-300 hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                    Selanjutnya
-                  </button>
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="text-center py-16 text-zinc-500 bg-zinc-900/20 rounded-xl border border-zinc-800">
-              Tidak ada barang yang ditemukan pada tab dan label ini.
-            </div>
-          )}
-        </div>
+      {/* Layer 5: Riwayat Transaksi */}
+      {activeLayer === "history" && (
+        <TransactionHistoryTable histories={histories} items={items} isAdmin={isAdmin} />
       )}
 
-      {/* Layer 4: Event Management Workspace */}
-      {activeLayer === 'events' && (
+      {/* Layer 6: Katalog Paket */}
+      {activeLayer === "packages" && (
+        <PackageCatalogGrid
+          packages={packages}
+          items={items}
+          masterCategories={masterCategories}
+          masterLabels={masterLabels}
+          onAddToCart={(pkg) => setAddingToCartPkg(pkg)}
+        />
+      )}
+
+      {/* Layer 7: Event Management Workspace */}
+      {activeLayer === "events" && (
         <EventManagementTab
           histories={histories}
           items={items}
@@ -1614,222 +186,7 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
         />
       )}
 
-      {/* --- KOTAK POPUP PREVIEW FOTO --- */}
-      <Dialog open={!!selectedImage} onOpenChange={(open) => !open && setSelectedImage(null)}>
-        <DialogContent aria-describedby={undefined} className="bg-zinc-950/95 border-zinc-800 p-2 rounded-2xl shadow-2xl max-w-4xl flex justify-center items-center">
-          <DialogTitle className="sr-only">Preview Foto Aset</DialogTitle>
-          {selectedImage && (
-            <img 
-              src={selectedImage} 
-              alt="Preview" 
-              className="w-full h-auto max-h-[85vh] object-contain rounded-xl" 
-            />
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* --- KOTAK POPUP DETAIL ASET --- */}
-      <Dialog open={!!selectedItemDetail} onOpenChange={(open) => !open && setSelectedItemDetail(null)}>
-        <DialogContent aria-describedby={undefined} className="bg-zinc-950 border-zinc-800 text-zinc-50 w-full max-w-xl sm:max-w-[600px] md:max-w-3xl max-h-[90vh] overflow-hidden overflow-x-hidden flex flex-col p-0">
-          <DialogTitle className="sr-only">Detail Aset</DialogTitle>
-          {selectedItemDetail && (
-            <>
-              <div className="relative h-48 sm:h-64 bg-zinc-900 border-b border-zinc-800 shrink-0">
-                {selectedItemDetail.imageUrl ? (
-                  <img 
-                    src={selectedItemDetail.imageUrl} 
-                    alt={selectedItemDetail.name} 
-                    className="w-full h-full object-cover cursor-pointer"
-                    onClick={() => setSelectedImage(selectedItemDetail.imageUrl!)}
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-zinc-700">
-                    <span className="text-sm font-bold uppercase tracking-widest border border-zinc-800 px-4 py-2 rounded-full">No Image</span>
-                  </div>
-                )}
-                <div className="absolute top-3 left-3 flex flex-wrap gap-1">
-                  {selectedItemDetail.categories?.map(cat => (
-                    <span key={cat.id} className="inline-flex items-center rounded-md bg-zinc-950/80 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-300 ring-1 ring-inset ring-zinc-700/50 backdrop-blur-sm">
-                      {cat.name}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              
-              <div className="p-4 sm:p-6 overflow-y-auto flex-1">
-                <div className="flex flex-col gap-4 mb-4 border-b border-zinc-800/50 pb-4">
-                  <div className="flex flex-col gap-1">
-                    <h2 className="text-xl sm:text-2xl font-bold text-zinc-100">{selectedItemDetail.name}</h2>
-                    <p className="text-sm font-mono text-zinc-400">{selectedItemDetail.code}</p>
-                  </div>
-                  
-                  {/* Visual Barcode Dummy di Dalam Modal Rincian */}
-                  <DummyBarcode value={selectedItemDetail.code} />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
-                  <div className="space-y-3">
-                    <div>
-                      <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">Status Ketersediaan</p>
-                      <div className="flex flex-col gap-1.5">
-                        <div className="flex justify-between items-center bg-emerald-950/20 border border-emerald-900/30 px-3 py-2 rounded-md">
-                          <span className="text-sm text-zinc-300">Tersedia (Gudang)</span>
-                          <span className="font-bold text-emerald-400">{selectedItemDetail.quantity} Unit</span>
-                        </div>
-                        <div className="flex justify-between items-center bg-amber-950/20 border border-amber-900/30 px-3 py-2 rounded-md">
-                          <span className="text-sm text-zinc-300">Sedang Keluar (Rental)</span>
-                          <span className="font-bold text-amber-400">{selectedItemDetail.rentedQuantity} Unit</span>
-                        </div>
-                        <div className="flex justify-between items-center bg-red-950/20 border border-red-900/30 px-3 py-2 rounded-md">
-                          <span className="text-sm text-zinc-300">Maintenance (MT)</span>
-                          <span className="font-bold text-red-400">{selectedItemDetail.maintenanceQuantity} Unit</span>
-                        </div>
-                        <div className="flex justify-between items-center bg-zinc-900 border border-zinc-800 px-3 py-2 rounded-md mt-1">
-                          <span className="text-sm font-bold text-zinc-100">Total Keseluruhan</span>
-                          <span className="font-black text-zinc-50">{selectedItemDetail.quantity + selectedItemDetail.rentedQuantity + selectedItemDetail.maintenanceQuantity} Unit</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div>
-                      <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">Informasi Valuasi & Harga</p>
-                      <div className="bg-zinc-900 border border-zinc-800 rounded-md p-3 space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-zinc-400">Harga Beli Satuan</span>
-                          <span className="text-sm font-medium text-zinc-200">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(selectedItemDetail.price || 0)}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-zinc-400">Persentase Sewa</span>
-                          <span className="text-sm font-medium text-zinc-200">{selectedItemDetail.rentPercentage || 0}%</span>
-                        </div>
-                        <div className="flex justify-between items-center pt-2 border-t border-zinc-800 mt-2">
-                          <span className="text-sm font-bold text-zinc-300">Harga Sewa Satuan</span>
-                          <span className="text-sm font-bold text-emerald-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(((selectedItemDetail.price || 0) * (selectedItemDetail.rentPercentage || 0)) / 100)}</span>
-                        </div>
-                        <div className="flex justify-between items-center pt-2 border-t border-zinc-800">
-                          <span className="text-sm font-bold text-zinc-300">Total Valuasi Aset</span>
-                          <span className="text-sm font-bold text-blue-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format((selectedItemDetail.quantity + selectedItemDetail.rentedQuantity + selectedItemDetail.maintenanceQuantity) * (selectedItemDetail.price || 0))}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">Deskripsi Aset</p>
-                  <div className="bg-zinc-900/50 border border-zinc-800 rounded-md p-3 text-sm text-zinc-300 min-h-[60px] whitespace-pre-wrap">
-                    {selectedItemDetail.description || <span className="text-zinc-500 italic">Tidak ada deskripsi.</span>}
-                  </div>
-                </div>
-                
-                {selectedItemDetail.createdAt && (
-                  <p className="text-[10px] sm:text-xs text-zinc-500 mt-6 text-center">
-                    Ditambahkan ke sistem pada: {new Date(selectedItemDetail.createdAt).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                  </p>
-                )}
-              </div>
-              
-              <div className="p-4 border-t border-zinc-800 bg-zinc-950 shrink-0 flex justify-end gap-2">
-                <button 
-                  type="button"
-                  onClick={() => {
-                    handleAddItemToCart(selectedItemDetail);
-                    setSelectedItemDetail(null);
-                  }}
-                  disabled={selectedItemDetail.quantity <= 0}
-                  className={`px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors flex items-center gap-2 border shadow-sm ${
-                    selectedItemDetail.quantity > 0
-                      ? "bg-emerald-950/60 hover:bg-emerald-900 text-emerald-400 border-emerald-800 hover:text-emerald-300 cursor-pointer"
-                      : "bg-zinc-900 text-zinc-600 border-zinc-800 cursor-not-allowed opacity-50"
-                  }`}
-                >
-                  <ShoppingCart className="w-4 h-4" />
-                  <span>+ Tambah ke Keranjang</span>
-                </button>
-                <button 
-                  onClick={() => setSelectedItemDetail(null)}
-                  className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-100 rounded-md text-sm font-medium transition-colors border border-zinc-800"
-                >
-                  Tutup
-                </button>
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* KOTAK POPUP EDIT & DELETE HISTORY (INLINE UNTUK PERFORMA CEPAT) */}
-      <Dialog open={!!editingHistory} onOpenChange={(open) => !open && setEditingHistory(null)}>
-        <DialogContent aria-describedby={undefined} className="bg-zinc-950 border-zinc-800 text-zinc-50">
-          <DialogTitle>Ubah Riwayat Transaksi</DialogTitle>
-          <form onSubmit={handleUpdateHistory} className="space-y-4 pt-2">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-zinc-400">Tanggal Faktur</label>
-              <input type="date" name="date" defaultValue={editingHistory?.date ? new Date(editingHistory.date).toISOString().split('T')[0] : ''} className="w-full h-10 rounded-md bg-zinc-900 border border-zinc-800 px-3 text-sm text-zinc-100" required />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-zinc-400">Catatan / Deskripsi</label>
-              <input type="text" name="description" defaultValue={editingHistory?.description || ''} className="w-full h-10 rounded-md bg-zinc-900 border border-zinc-800 px-3 text-sm text-zinc-100" required />
-            </div>
-            <button type="submit" disabled={isHistoryActionLoading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-10 rounded-md font-medium flex justify-center items-center gap-2">
-              {isHistoryActionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan Perubahan"}
-            </button>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!deletingHistory} onOpenChange={(open) => !open && setDeletingHistory(null)}>
-        <DialogContent aria-describedby={undefined} className="bg-zinc-950 border-zinc-800 text-zinc-50">
-          <DialogTitle className="text-red-400">Hapus Riwayat Transaksi?</DialogTitle>
-          <p className="text-sm text-zinc-400 mt-2">Apakah Anda yakin ingin menghapus catatan riwayat faktur <strong>"{deletingHistory?.description}"</strong>? (Data barang di gudang tidak akan berubah, hanya menghilangkan catatannya saja).</p>
-          <div className="grid grid-cols-2 gap-4 mt-6">
-            <button onClick={() => setDeletingHistory(null)} className="h-10 border border-zinc-800 text-zinc-400 hover:bg-zinc-900 rounded-md">Batal</button>
-            <button onClick={handleDeleteHistory} disabled={isHistoryActionLoading} className="h-10 bg-red-600 hover:bg-red-700 text-white rounded-md flex justify-center items-center">
-              {isHistoryActionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Ya, Hapus"}
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* KOTAK POPUP DELETE PAKET */}
-      <Dialog open={!!deletingPackage} onOpenChange={(open) => !open && setDeletingPackage(null)}>
-        <DialogContent aria-describedby={undefined} className="bg-zinc-950 border-zinc-800 text-zinc-50">
-          <DialogTitle className="text-red-400">Hapus Template Paket?</DialogTitle>
-          <p className="text-sm text-zinc-400 mt-2">Apakah Anda yakin ingin menghapus template paket <strong>"{deletingPackage?.name}"</strong>? (Tindakan ini tidak bisa dibatalkan).</p>
-          <div className="grid grid-cols-2 gap-4 mt-6">
-            <button onClick={() => setDeletingPackage(null)} className="h-10 border border-zinc-800 text-zinc-400 hover:bg-zinc-900 rounded-md">Batal</button>
-            <button onClick={handleDeletePackage} disabled={isHistoryActionLoading} className="h-10 bg-red-600 hover:bg-red-700 text-white rounded-md flex justify-center items-center">
-              {isHistoryActionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Ya, Hapus"}
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* KOTAK POPUP BATCH REGENERATE KODE */}
-      <Dialog open={showBatchDialog} onOpenChange={(open) => !open && setShowBatchDialog(false)}>
-        <DialogContent aria-describedby={undefined} className="bg-zinc-950 border-zinc-800 text-zinc-50">
-          <DialogTitle className="text-indigo-400">Format Ulang Semua Kode Aset?</DialogTitle>
-          <p className="text-sm text-zinc-400 mt-2">
-            Tindakan ini akan <strong>mengubah seluruh kode aset saat ini</strong> secara otomatis menggunakan format baru (Contoh: <code>AUD-BCL-001</code>) berdasarkan label yang terpasang pada masing-masing barang.
-          </p>
-          <div className="bg-amber-950/50 border border-amber-900/50 p-3 rounded-md mt-4">
-            <p className="text-sm text-amber-400 font-medium">Perhatian:</p>
-            <p className="text-xs text-amber-500/80 mt-1">
-              Jika Anda sudah mencetak label barcode/QR fisik menggunakan kode lama, fisik label tersebut tidak akan sinkron lagi dengan sistem setelah proses ini. Pastikan Anda siap mencetak ulang label jika diperlukan.
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-4 mt-6">
-            <button onClick={() => setShowBatchDialog(false)} className="h-10 border border-zinc-800 text-zinc-400 hover:bg-zinc-900 rounded-md">Batal</button>
-            <button onClick={handleBatchRegenerate} disabled={isBatchLoading} className="h-10 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md flex justify-center items-center">
-              {isBatchLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Ya, Format Ulang"}
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* KOTAK POPUP KONFIRMASI KE KERANJANG */}
+      {/* KOTAK POPUP KONFIRMASI KE KERANJANG DARI PAKET */}
       <Dialog open={!!addingToCartPkg} onOpenChange={(open) => !open && setAddingToCartPkg(null)}>
         <DialogContent aria-describedby={undefined} className="bg-zinc-950 border-zinc-800 text-zinc-50">
           <DialogTitle className="text-emerald-400 flex items-center gap-2">
@@ -1837,19 +194,24 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
             Masukkan ke Keranjang?
           </DialogTitle>
           <p className="text-sm text-zinc-400 mt-2">
-            Apakah Anda yakin ingin memasukkan seluruh aset dari paket <strong>"{addingToCartPkg?.name}"</strong> ke Keranjang Kasir?
+            Apakah Anda yakin ingin memasukkan seluruh aset dari paket <strong>&quot;{addingToCartPkg?.name}&quot;</strong> ke Keranjang Kasir?
           </p>
           <div className="grid grid-cols-2 gap-4 mt-6">
-            <button onClick={() => setAddingToCartPkg(null)} className="h-10 border border-zinc-800 text-zinc-400 hover:bg-zinc-900 rounded-md transition-colors">Batal</button>
+            <button
+              onClick={() => setAddingToCartPkg(null)}
+              className="h-10 border border-zinc-800 text-zinc-400 hover:bg-zinc-900 rounded-md transition-colors cursor-pointer"
+            >
+              Batal
+            </button>
             <button
               onClick={() => {
                 if (addingToCartPkg) {
-                  window.dispatchEvent(new CustomEvent('add-to-pos-cart', { detail: { pkgId: addingToCartPkg.id } }));
+                  setExternalPkgId(addingToCartPkg.id);
                   setAddingToCartPkg(null);
-                  setCartSuccessMsg(true); // Tampilkan popup sukses
+                  setCartSuccessMsg(true);
                 }
               }}
-              className="h-10 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md flex justify-center items-center transition-colors font-medium"
+              className="h-10 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md flex justify-center items-center transition-colors font-medium cursor-pointer"
             >
               Ya, Masukkan
             </button>
@@ -1858,8 +220,17 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
       </Dialog>
 
       {/* KOTAK POPUP SUKSES MASUK KERANJANG */}
-      <Dialog open={cartSuccessMsg} onOpenChange={(open) => { setCartSuccessMsg(open); if (!open) setAddedItemName(null); }}>
-        <DialogContent aria-describedby={undefined} className="bg-zinc-950 border-zinc-800 text-zinc-50 sm:max-w-sm flex flex-col items-center justify-center p-6 text-center">
+      <Dialog
+        open={cartSuccessMsg}
+        onOpenChange={(open) => {
+          setCartSuccessMsg(open);
+          if (!open) setAddedItemName(null);
+        }}
+      >
+        <DialogContent
+          aria-describedby={undefined}
+          className="bg-zinc-950 border-zinc-800 text-zinc-50 sm:max-w-sm flex flex-col items-center justify-center p-6 text-center"
+        >
           <DialogTitle className="sr-only">Sukses</DialogTitle>
           <div className="w-12 h-12 rounded-full bg-emerald-950/50 flex items-center justify-center mb-2 border border-emerald-900">
             <ShoppingCart className="w-6 h-6 text-emerald-400" />
@@ -1867,25 +238,25 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
           <h3 className="text-lg font-bold text-zinc-100">Berhasil Ditambahkan!</h3>
           <p className="text-sm text-zinc-400 mt-2">
             {addedItemName ? (
-              <span>Aset <strong>"{addedItemName}"</strong> telah dimasukkan ke Keranjang Kasir.</span>
+              <span>
+                Aset <strong>&quot;{addedItemName}&quot;</strong> telah dimasukkan ke Keranjang Kasir.
+              </span>
             ) : (
               <span>Seluruh aset telah dimasukkan ke Keranjang Kasir.</span>
-            )} Silakan buka <strong>Keranjang Kasir</strong> di bagian atas untuk meninjau dan memproses sewa.
+            )}{" "}
+            Silakan buka <strong>Keranjang Kasir</strong> di bagian atas untuk meninjau dan memproses sewa.
           </p>
-          <button onClick={() => { setCartSuccessMsg(false); setAddedItemName(null); }} className="mt-6 w-full h-10 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 rounded-md border border-zinc-800 transition-colors font-medium">Tutup</button>
+          <button
+            onClick={() => {
+              setCartSuccessMsg(false);
+              setAddedItemName(null);
+            }}
+            className="mt-6 w-full h-10 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 rounded-md border border-zinc-800 transition-colors font-medium cursor-pointer"
+          >
+            Tutup
+          </button>
         </DialogContent>
       </Dialog>
-
-      {/* TOAST FEEDBACK SINKRONISASI */}
-      {syncToastMsg && (
-        <div className="fixed bottom-6 right-6 bg-emerald-950 border border-emerald-600 text-emerald-200 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 z-50 animate-in fade-in slide-in-from-bottom-5 duration-200">
-          <Check className="w-5 h-5 text-emerald-400 shrink-0" />
-          <div>
-            <p className="text-sm font-bold text-white">Sinkronisasi Berhasil!</p>
-            <p className="text-xs text-emerald-300">Data event dan ketersediaan barang telah diperbarui.</p>
-          </div>
-        </div>
-      )}
 
       {/* MODAL RESTRIKSI AKUN DEMO */}
       <DemoRestrictionDialog
@@ -1894,7 +265,6 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
         title={demoModalContent.title}
         message={demoModalContent.message}
       />
-
     </div>
   );
 }
