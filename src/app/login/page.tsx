@@ -17,18 +17,76 @@ export default function LoginPage() {
     setLoading(true)
     setErrorMsg(null)
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    try {
+      // Jalur 1: Coba autentikasi langsung via Supabase SDK di browser
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
-    if (error) {
-      setErrorMsg(error.message)
+      if (!error && data?.session) {
+        router.replace("/")
+        router.refresh()
+        return
+      }
+
+      // Jika errornya adalah masalah jaringan / diblokir perisai browser ("Failed to fetch")
+      const isNetworkError = !error || error.message.toLowerCase().includes("failed to fetch") || error.status === 0
+      
+      if (isNetworkError) {
+        // Jalur 2: Fallback otomatis lewat server internal (/api/auth/login)
+        const serverRes = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        })
+
+        const serverData = await serverRes.json()
+
+        if (!serverRes.ok || serverData.error) {
+          setErrorMsg(serverData.error || "Gagal masuk. Periksa kembali email dan kata sandi Anda.")
+          setLoading(false)
+          return
+        }
+
+        if (serverData.session) {
+          // Sinkronkan token session ke client Supabase SDK
+          await supabase.auth.setSession({
+            access_token: serverData.session.access_token,
+            refresh_token: serverData.session.refresh_token,
+          })
+          router.replace("/")
+          router.refresh()
+          return
+        }
+      }
+
+      setErrorMsg(error?.message || "Kredensial tidak valid.")
       setLoading(false)
-    } else {
-      // Jika berhasil login, kembalikan ke dashboard lalu segarkan rute
-      router.replace("/")
-      router.refresh()
+    } catch {
+      // Jalur fallback darurat lewat server internal
+      try {
+        const serverRes = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        })
+        const serverData = await serverRes.json()
+
+        if (serverRes.ok && serverData.session) {
+          await supabase.auth.setSession({
+            access_token: serverData.session.access_token,
+            refresh_token: serverData.session.refresh_token,
+          })
+          router.replace("/")
+          router.refresh()
+          return
+        }
+        setErrorMsg(serverData.error || "Gagal menghubungi server autentikasi.")
+      } catch {
+        setErrorMsg("Koneksi gagal. Pastikan jaringan internet Anda aktif atau matikan pelindung iklan browser.")
+      }
+      setLoading(false)
     }
   }
 
