@@ -49,10 +49,11 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
   const [targetEventName, setTargetEventName] = useState<string>("")
   const [rentalDays, setRentalDays] = useState<number | "">(1)
   
-  const [customItems, setCustomItems] = useState<{id: string, name: string, qty: number | "", price: number | "", footnote: string}[]>([])
+  const [customItems, setCustomItems] = useState<{id: string, lineId?: string, name: string, qty: number | "", price: number | "", discount?: number | "", footnote: string}[]>([])
   const [customName, setCustomName] = useState("")
   const [customQty, setCustomQty] = useState<number | "">(1)
   const [customPrice, setCustomPrice] = useState<number | "">(0)
+  const [customDiscount, setCustomDiscount] = useState<number | "">(0)
 
   const [isAdmin, setIsAdmin] = useState(false)
   const [isDummyUser, setIsDummyUser] = useState(false)
@@ -118,14 +119,24 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
 
   const addToCart = (item: any) => {
     if (item.quantity <= 0) return
-    const existing = cart.find(c => c.id === item.id)
-    if (existing) {
-      if (existing.qty < item.quantity) {
-        setCart(cart.map(c => c.id === item.id ? { ...c, qty: c.qty + 1 } : c))
-      }
-    } else {
-      setCart([...cart, { ...item, qty: 1 }])
+    const currentAccumulatedQty = cart
+      .filter(c => c.id === item.id)
+      .reduce((sum, c) => sum + (Number(c.qty) || 1), 0);
+
+    if (currentAccumulatedQty >= item.quantity) {
+      setWarningMsg(`Stok tersedia di gudang untuk "${item.name}" sudah maksimal di keranjang (${item.quantity} Unit).`);
+      return;
     }
+
+    // MULTI-ADD: Buat baris mandiri baru dengan lineId tanpa auto-merge
+    const newLine = {
+      lineId: crypto.randomUUID(),
+      ...item,
+      qty: 1,
+      discount: 0,
+      footnote: "",
+    }
+    setCart(prev => [...prev, newLine])
     setSearchQuery("")
     setShowResults(false)
   }
@@ -136,23 +147,9 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
     
     let newCart = [...cart];
 
-    // Jika mengganti paket melalui dropdown, kurangi / hapus item dari paket sebelumnya terlebih dahulu
+    // Jika mengganti paket melalui dropdown, hapus paket sebelumnya
     if (!isAppendOnly && selectedPackageId) {
-      const prevPkg = packages.find(p => p.id === selectedPackageId);
-      if (prevPkg) {
-        try {
-          const prevPayload = JSON.parse(prevPkg.payload);
-          prevPayload.forEach((prevItem: any) => {
-            const cartIndex = newCart.findIndex(c => c.id === prevItem.id);
-            if (cartIndex >= 0) {
-              newCart[cartIndex].qty -= prevItem.qty;
-              if (newCart[cartIndex].qty <= 0) {
-                newCart.splice(cartIndex, 1);
-              }
-            }
-          });
-        } catch (e) {}
-      }
+      newCart = newCart.filter(c => !(c as any).fromPackageId || (c as any).fromPackageId !== selectedPackageId);
     }
 
     if (!isAppendOnly) {
@@ -175,22 +172,29 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
       let hasError = false;
       let errorDetails = "";
 
-      for (const pItem of parsedPayload) {
-        const realItem = items.find(i => i.id === pItem.id);
+      // Akumulasikan kebutuhan per item id untuk validasi stok gudang
+      const currentInCartMap = new Map<string, number>();
+      newCart.forEach(c => {
+        currentInCartMap.set(c.id, (currentInCartMap.get(c.id) || 0) + (Number(c.qty) || 1));
+      });
+
+      const pkgDemandMap = new Map<string, number>();
+      parsedPayload.forEach((pItem: any) => {
+        pkgDemandMap.set(pItem.id, (pkgDemandMap.get(pItem.id) || 0) + (Number(pItem.qty) || 1));
+      });
+
+      for (const [itemId, demandQty] of pkgDemandMap.entries()) {
+        const realItem = items.find(i => i.id === itemId);
         if (!realItem) {
           hasError = true;
-          errorDetails += `${pItem.name} tidak ditemukan. `;
+          errorDetails += `Barang tidak ditemukan. `;
           continue;
         }
 
-        const availableQty = realItem.quantity;
-        // Cek total kebutuhan (stok saat ini di keranjang + tambahan dari paket)
-        const existingQtyInCart = newCart.find(c => c.id === realItem.id)?.qty || 0;
-        const requiredQty = existingQtyInCart + pItem.qty;
-
-        if (requiredQty > availableQty) {
+        const totalNeeded = (currentInCartMap.get(itemId) || 0) + demandQty;
+        if (totalNeeded > realItem.quantity) {
           hasError = true;
-          errorDetails += `${realItem.name} stok tidak cukup (Butuh ${requiredQty}, Ada ${availableQty}). `;
+          errorDetails += `${realItem.name} stok tidak cukup (Butuh ${totalNeeded}, Ada ${realItem.quantity}). `;
         }
       }
 
@@ -203,16 +207,17 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
         return;
       }
 
+      // MULTI-ADD: Masukkan setiap item paket sebagai baris mandiri baru
       parsedPayload.forEach((pItem: any) => {
         const realItem = items.find(i => i.id === pItem.id)!;
-        const cartItemIndex = newCart.findIndex(c => c.id === realItem.id);
-        
-        if (cartItemIndex >= 0) {
-          newCart[cartItemIndex].qty += pItem.qty; // Gabungkan / akumulasikan kuantitasnya
-          newCart[cartItemIndex].footnote = pItem.footnote || newCart[cartItemIndex].footnote;
-        } else {
-          newCart.push({ ...realItem, qty: pItem.qty, footnote: pItem.footnote || "" });
-        }
+        newCart.push({
+          lineId: crypto.randomUUID(),
+          fromPackageId: pkg.id,
+          ...realItem,
+          qty: Number(pItem.qty) || 1,
+          discount: Math.min(100, Math.max(0, Number(pItem.discount) || 0)),
+          footnote: pItem.footnote || "",
+        });
       });
 
       setCart(newCart);
@@ -234,26 +239,57 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
     setWarningMsg(null);
   }
 
-  const updateQty = (id: string, newQty: any) => {
-    setCart(cart.map(c => c.id === id ? { ...c, qty: newQty === "" ? "" : Math.min(Math.max(1, parseInt(newQty) || 0), c.quantity) } : c))
+  const updateQty = (lineId: string, newQty: any) => {
+    const target = cart.find(c => c.lineId === lineId);
+    if (!target) return;
+
+    const otherLinesQty = cart
+      .filter(c => c.id === target.id && c.lineId !== lineId)
+      .reduce((sum, c) => sum + (Number(c.qty) || 1), 0);
+    const maxAllowed = Math.max(1, target.quantity - otherLinesQty);
+
+    setCart(cart.map(c => {
+      if (c.lineId === lineId) {
+        return {
+          ...c,
+          qty: newQty === "" ? "" : Math.min(Math.max(1, parseInt(newQty) || 0), maxAllowed)
+        };
+      }
+      return c;
+    }));
   }
 
-  const updateFootnote = (id: string, footnote: string) => {
-    setCart(cart.map(c => c.id === id ? { ...c, footnote } : c))
+  const updateDiscount = (lineId: string, newDiscount: any) => {
+    setCart(cart.map(c => {
+      if (c.lineId === lineId) {
+        return {
+          ...c,
+          discount: newDiscount === "" ? "" : Math.min(100, Math.max(0, parseInt(newDiscount) || 0))
+        };
+      }
+      return c;
+    }));
+  }
+
+  const updateFootnote = (lineId: string, footnote: string) => {
+    setCart(cart.map(c => c.lineId === lineId ? { ...c, footnote } : c));
   }
 
   const handleAddCustomItem = () => {
     if (!customName.trim()) return;
     setCustomItems([...customItems, {
       id: `custom-${Date.now()}`,
+      lineId: crypto.randomUUID(),
       name: customName,
       qty: Number(customQty) || 1,
       price: Number(customPrice) || 0,
+      discount: Math.min(100, Math.max(0, Number(customDiscount) || 0)),
       footnote: ""
     }])
     setCustomName("")
     setCustomQty(1)
     setCustomPrice(0)
+    setCustomDiscount(0)
   }
 
   const updateCustomQty = (id: string, newQty: any) => {
@@ -262,6 +298,10 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
 
   const updateCustomPrice = (id: string, newPrice: any) => {
     setCustomItems(customItems.map(c => c.id === id ? { ...c, price: newPrice === "" ? "" : Math.max(0, parseInt(newPrice) || 0) } : c))
+  }
+
+  const updateCustomDiscount = (id: string, newDiscount: any) => {
+    setCustomItems(customItems.map(c => c.id === id ? { ...c, discount: newDiscount === "" ? "" : Math.min(100, Math.max(0, parseInt(newDiscount) || 0)) } : c))
   }
 
   const updateCustomFootnote = (id: string, newFootnote: string) => {
@@ -317,14 +357,25 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
     setCustomName("")
     setCustomQty(1)
     setCustomPrice(0)
+    setCustomDiscount(0)
   }
 
   const groupedCart = useMemo(() => groupItemsByPrimaryCategory(cart, items), [cart, items]);
 
   const safeRentalDays = Number(rentalDays) || 1
   const safeDiscountPercentage = Number(discountPercentage) || 0
-  const assetSubTotal = cart.reduce((acc, item) => acc + ((Number(item.qty) || 1) * ((item.price || 0) * (item.rentPercentage || 0) / 100) * safeRentalDays), 0)
-  const customSubTotal = customItems.reduce((acc, item) => acc + ((Number(item.qty) || 1) * (Number(item.price) || 0) * safeRentalDays), 0)
+  const assetSubTotal = cart.reduce((acc, item) => {
+    const baseRentPerItem = ((item.price || 0) * (item.rentPercentage || 0)) / 100;
+    const itemDiscount = Math.min(100, Math.max(0, Number(item.discount) || 0));
+    const lineNet = (baseRentPerItem * (Number(item.qty) || 1)) * (1 - (itemDiscount / 100));
+    return acc + (lineNet * safeRentalDays);
+  }, 0);
+  const customSubTotal = customItems.reduce((acc, item) => {
+    const basePrice = Number(item.price) || 0;
+    const itemDiscount = Math.min(100, Math.max(0, Number(item.discount) || 0));
+    const lineNet = (basePrice * (Number(item.qty) || 1)) * (1 - (itemDiscount / 100));
+    return acc + (lineNet * safeRentalDays);
+  }, 0);
   const subTotal = assetSubTotal + customSubTotal
   const discountAmount = subTotal * (safeDiscountPercentage / 100)
   const grandTotal = subTotal - discountAmount
@@ -554,52 +605,111 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
                     </div>
 
                     <div className="flex flex-col gap-2.5">
-                      {group.items.map(item => (
-                        <div key={item.id} className="bg-zinc-900 p-3 rounded-lg border border-zinc-800 flex flex-col gap-2">
-                          <div className="flex justify-between items-start gap-3">
-                            <div className="flex items-center gap-3 min-w-0 flex-1">
-                              <ItemThumbnail src={item.imageUrl} alt={item.name} className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg shrink-0" iconClassName="w-5 h-5 text-zinc-500" />
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm font-bold text-zinc-100 truncate">{item.name}</p>
-                                <p className="text-xs text-zinc-500 font-mono">{item.code} | Max: {item.quantity} Unit</p>
+                      {group.items.map(item => {
+                        const baseRentPerItem = ((item.price || 0) * (item.rentPercentage || 0)) / 100;
+                        const itemDiscount = Math.min(100, Math.max(0, Number(item.discount) || 0));
+                        const originalLineTotal = (Number(item.qty) || 1) * baseRentPerItem * safeRentalDays;
+                        const lineNetTotal = originalLineTotal * (1 - (itemDiscount / 100));
+
+                        return (
+                          <div key={item.lineId || item.id} className="bg-zinc-900 p-3 rounded-lg border border-zinc-800 flex flex-col gap-2">
+                            <div className="flex justify-between items-start gap-3">
+                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                                <ItemThumbnail src={item.imageUrl} alt={item.name} className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg shrink-0" iconClassName="w-5 h-5 text-zinc-500" />
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-bold text-zinc-100 truncate">{item.name}</p>
+                                  <p className="text-xs text-zinc-500 font-mono">{item.code} | Max: {item.quantity} Unit</p>
+                                </div>
                               </div>
+                              <button type="button" onClick={() => setCart(cart.filter(c => c.lineId !== item.lineId))} className="text-zinc-500 hover:text-red-400 p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded shrink-0 transition-colors" title="Hapus dari keranjang"><Trash2 className="w-4 h-4"/></button>
                             </div>
-                            <button type="button" onClick={() => setCart(cart.filter(c => c.id !== item.id))} className="text-zinc-500 hover:text-red-400 p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded shrink-0 transition-colors" title="Hapus dari keranjang"><Trash2 className="w-4 h-4"/></button>
-                          </div>
-                          <div className="flex flex-col gap-2 mt-1 pt-2 border-t border-zinc-800/50">
-                            <div className="flex items-center justify-between gap-2">
+                            <div className="flex flex-col gap-2 mt-1 pt-2 border-t border-zinc-800/50">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-1">
+                                    <Label className="text-xs shrink-0">Qty:</Label>
+                                    <Input 
+                                      type="text" 
+                                      inputMode="numeric" 
+                                      pattern="[0-9]*" 
+                                      value={item.qty} 
+                                      onFocus={(e) => e.target.select()}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val === "" || /^\d+$/.test(val)) {
+                                          updateQty(item.lineId, val === "" ? "" : parseInt(val));
+                                        }
+                                      }} 
+                                      onBlur={() => {
+                                        if (item.qty === "" || Number(item.qty) < 1) updateQty(item.lineId, 1);
+                                      }}
+                                      className="w-14 sm:w-16 h-8 text-xs bg-zinc-950 border-zinc-700 text-center font-bold" 
+                                    />
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Label className="text-xs shrink-0">Disc(%):</Label>
+                                    <Input 
+                                      type="text" 
+                                      inputMode="numeric" 
+                                      pattern="[0-9]*" 
+                                      value={item.discount ?? 0} 
+                                      onFocus={(e) => e.target.select()}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val === "" || /^\d+$/.test(val)) {
+                                          updateDiscount(item.lineId, val === "" ? "" : Math.min(100, Math.max(0, parseInt(val))));
+                                        }
+                                      }} 
+                                      onBlur={() => {
+                                        if (item.discount === "" || Number(item.discount) < 0) updateDiscount(item.lineId, 0);
+                                      }}
+                                      className="w-14 sm:w-16 h-8 text-xs bg-zinc-950 border-zinc-700 text-center font-bold" 
+                                    />
+                                  </div>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <p className="text-[10px] text-zinc-500">Nilai Sewa</p>
+                                  {itemDiscount === 100 ? (
+                                    <div className="flex flex-col items-end">
+                                      <span className="text-[11px] line-through text-zinc-500">
+                                        {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(originalLineTotal)}
+                                      </span>
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-xs sm:text-sm font-bold text-emerald-400">Rp 0</span>
+                                        <span className="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1 py-0.2 rounded font-bold">
+                                          FREE / BONUS (Diskon 100%)
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ) : itemDiscount > 0 ? (
+                                    <div className="flex flex-col items-end">
+                                      <span className="text-[11px] line-through text-zinc-500">
+                                        {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(originalLineTotal)}
+                                      </span>
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-xs sm:text-sm font-bold text-emerald-400">
+                                          {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(lineNetTotal)}
+                                        </span>
+                                        <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1 py-0.2 rounded font-bold">
+                                          -{itemDiscount}%
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <p className="text-xs sm:text-sm font-bold text-emerald-400">
+                                      {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(lineNetTotal)}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
                               <div className="flex items-center gap-2">
-                                <Label className="text-xs shrink-0">Qty:</Label>
-                                <Input 
-                                  type="text" 
-                                  inputMode="numeric" 
-                                  pattern="[0-9]*" 
-                                  value={item.qty} 
-                                  onFocus={(e) => e.target.select()}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    if (val === "" || /^\d+$/.test(val)) {
-                                      updateQty(item.id, val === "" ? "" : parseInt(val));
-                                    }
-                                  }} 
-                                  onBlur={() => {
-                                    if (item.qty === "" || Number(item.qty) < 1) updateQty(item.id, 1);
-                                  }}
-                                  className="w-16 sm:w-20 h-8 text-xs bg-zinc-950 border-zinc-700 text-center font-bold" 
-                                />
+                                <Label className="text-xs shrink-0 text-zinc-400">Catatan:</Label>
+                                <Input type="text" placeholder="Catatan tambahan (opsional)..." value={item.footnote || ""} onChange={(e) => updateFootnote(item.lineId, e.target.value)} className="flex-1 h-8 text-xs bg-zinc-950 border-zinc-700" />
                               </div>
-                              <div className="text-right shrink-0">
-                                <p className="text-[10px] text-zinc-500">Nilai Sewa</p>
-                                <p className="text-xs sm:text-sm font-bold text-emerald-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format((Number(item.qty) || 1) * ((item.price || 0) * (item.rentPercentage || 0) / 100) * safeRentalDays)}</p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Label className="text-xs shrink-0 text-zinc-400">Catatan:</Label>
-                              <Input type="text" placeholder="Catatan tambahan (opsional)..." value={item.footnote || ""} onChange={(e) => updateFootnote(item.id, e.target.value)} className="flex-1 h-8 text-xs bg-zinc-950 border-zinc-700" />
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 ))}
@@ -618,74 +728,133 @@ export function AddRentalDialog({ items, packages = [] }: AddRentalDialogProps) 
                     </div>
 
                     <div className="flex flex-col gap-2.5">
-                      {customItems.map(item => (
-                        <div key={item.id} className="bg-blue-950/20 p-3 rounded-lg border border-blue-900/50 flex flex-col gap-2">
-                        <div className="flex justify-between items-start gap-3">
-                          <div className="flex items-center gap-3 min-w-0 flex-1">
-                            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg bg-blue-950/60 border border-blue-800/60 flex items-center justify-center shrink-0 text-blue-400">
-                              <PlusCircle className="w-6 h-6" />
+                      {customItems.map(item => {
+                        const basePrice = Number(item.price) || 0;
+                        const itemDiscount = Math.min(100, Math.max(0, Number(item.discount) || 0));
+                        const originalLineTotal = (Number(item.qty) || 1) * basePrice * safeRentalDays;
+                        const lineNetTotal = originalLineTotal * (1 - (itemDiscount / 100));
+
+                        return (
+                          <div key={item.lineId || item.id} className="bg-blue-950/20 p-3 rounded-lg border border-blue-900/50 flex flex-col gap-2">
+                            <div className="flex justify-between items-start gap-3">
+                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg bg-blue-950/60 border border-blue-800/60 flex items-center justify-center shrink-0 text-blue-400">
+                                  <PlusCircle className="w-6 h-6" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-bold text-zinc-100 truncate">{item.name}</p>
+                                  <p className="text-xs text-blue-400">Layanan Khusus / Kustom</p>
+                                </div>
+                              </div>
+                              <button type="button" onClick={() => setCustomItems(customItems.filter(c => (c.lineId || c.id) !== (item.lineId || item.id)))} className="text-zinc-500 hover:text-red-400 p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded shrink-0 transition-colors" title="Hapus layanan"><Trash2 className="w-4 h-4"/></button>
                             </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-bold text-zinc-100 truncate">{item.name}</p>
-                              <p className="text-xs text-blue-400">Layanan Khusus / Kustom</p>
+                            <div className="flex flex-col gap-2 mt-1 pt-2 border-t border-zinc-800/50">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-1">
+                                    <Label className="text-xs shrink-0">Qty:</Label>
+                                    <Input 
+                                      type="text" 
+                                      inputMode="numeric" 
+                                      pattern="[0-9]*" 
+                                      value={item.qty} 
+                                      onFocus={(e) => e.target.select()}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val === "" || /^\d+$/.test(val)) {
+                                          updateCustomQty(item.id, val === "" ? "" : parseInt(val));
+                                        }
+                                      }} 
+                                      onBlur={() => {
+                                        if (item.qty === "" || Number(item.qty) < 1) updateCustomQty(item.id, 1);
+                                      }}
+                                      className="w-14 sm:w-16 h-8 text-xs bg-zinc-950 border-zinc-700 text-center font-bold" 
+                                    />
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Label className="text-xs shrink-0">Tarif/Hari:</Label>
+                                    <Input 
+                                      type="text" 
+                                      inputMode="numeric" 
+                                      pattern="[0-9]*" 
+                                      value={item.price} 
+                                      onFocus={(e) => e.target.select()}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val === "" || /^\d+$/.test(val)) {
+                                          updateCustomPrice(item.id, val === "" ? "" : parseInt(val));
+                                        }
+                                      }} 
+                                      onBlur={() => {
+                                        if (item.price === "") updateCustomPrice(item.id, 0);
+                                      }}
+                                      className="w-16 sm:w-20 h-8 text-xs bg-zinc-950 border-zinc-700" 
+                                    />
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Label className="text-xs shrink-0">Disc(%):</Label>
+                                    <Input 
+                                      type="text" 
+                                      inputMode="numeric" 
+                                      pattern="[0-9]*" 
+                                      value={item.discount ?? 0} 
+                                      onFocus={(e) => e.target.select()}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val === "" || /^\d+$/.test(val)) {
+                                          updateCustomDiscount(item.id, val === "" ? "" : Math.min(100, Math.max(0, parseInt(val))));
+                                        }
+                                      }} 
+                                      onBlur={() => {
+                                        if (item.discount === "" || Number(item.discount) < 0) updateCustomDiscount(item.id, 0);
+                                      }}
+                                      className="w-14 sm:w-16 h-8 text-xs bg-zinc-950 border-zinc-700 text-center font-bold" 
+                                    />
+                                  </div>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <p className="text-[10px] text-zinc-500">Nilai Tambahan</p>
+                                  {itemDiscount === 100 ? (
+                                    <div className="flex flex-col items-end">
+                                      <span className="text-[11px] line-through text-zinc-500">
+                                        {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(originalLineTotal)}
+                                      </span>
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-xs sm:text-sm font-bold text-emerald-400">Rp 0</span>
+                                        <span className="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1 py-0.2 rounded font-bold">
+                                          FREE / BONUS (Diskon 100%)
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ) : itemDiscount > 0 ? (
+                                    <div className="flex flex-col items-end">
+                                      <span className="text-[11px] line-through text-zinc-500">
+                                        {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(originalLineTotal)}
+                                      </span>
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-xs sm:text-sm font-bold text-emerald-400">
+                                          {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(lineNetTotal)}
+                                        </span>
+                                        <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1 py-0.2 rounded font-bold">
+                                          -{itemDiscount}%
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <p className="text-xs sm:text-sm font-bold text-emerald-400">
+                                      {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(lineNetTotal)}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Label className="text-xs shrink-0 text-zinc-400">Catatan:</Label>
+                                <Input type="text" placeholder="Catatan tambahan (opsional)..." value={item.footnote || ""} onChange={(e) => updateCustomFootnote(item.id, e.target.value)} className="flex-1 h-8 text-xs bg-zinc-950 border-zinc-700" />
+                              </div>
                             </div>
                           </div>
-                          <button type="button" onClick={() => setCustomItems(customItems.filter(c => c.id !== item.id))} className="text-zinc-500 hover:text-red-400 p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded shrink-0 transition-colors" title="Hapus layanan"><Trash2 className="w-4 h-4"/></button>
-                        </div>
-                        <div className="flex flex-col gap-2 mt-1 pt-2 border-t border-zinc-800/50">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <Label className="text-xs shrink-0">Qty:</Label>
-                              <Input 
-                                type="text" 
-                                inputMode="numeric" 
-                                pattern="[0-9]*" 
-                                value={item.qty} 
-                                onFocus={(e) => e.target.select()}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  if (val === "" || /^\d+$/.test(val)) {
-                                    updateCustomQty(item.id, val === "" ? "" : parseInt(val));
-                                  }
-                                }} 
-                                onBlur={() => {
-                                  if (item.qty === "" || Number(item.qty) < 1) updateCustomQty(item.id, 1);
-                                }}
-                                className="w-16 sm:w-20 h-8 text-xs bg-zinc-950 border-zinc-700 text-center font-bold" 
-                              />
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Label className="text-xs shrink-0">Tarif/Hari:</Label>
-                              <Input 
-                                type="text" 
-                                inputMode="numeric" 
-                                pattern="[0-9]*" 
-                                value={item.price} 
-                                onFocus={(e) => e.target.select()}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  if (val === "" || /^\d+$/.test(val)) {
-                                    updateCustomPrice(item.id, val === "" ? "" : parseInt(val));
-                                  }
-                                }} 
-                                onBlur={() => {
-                                  if (item.price === "") updateCustomPrice(item.id, 0);
-                                }}
-                                className="w-20 sm:w-24 h-8 text-xs bg-zinc-950 border-zinc-700" 
-                              />
-                            </div>
-                            <div className="text-right shrink-0">
-                              <p className="text-[10px] text-zinc-500">Nilai Tambahan</p>
-                              <p className="text-xs sm:text-sm font-bold text-emerald-400">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format((Number(item.qty) || 1) * (Number(item.price) || 0) * safeRentalDays)}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Label className="text-xs shrink-0 text-zinc-400">Catatan:</Label>
-                            <Input type="text" placeholder="Catatan tambahan (opsional)..." value={item.footnote || ""} onChange={(e) => updateCustomFootnote(item.id, e.target.value)} className="flex-1 h-8 text-xs bg-zinc-950 border-zinc-700" />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}

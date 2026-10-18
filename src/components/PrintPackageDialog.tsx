@@ -26,14 +26,18 @@ export function PrintPackageDialog({ pkg, items }: PrintPackageDialogProps) {
   const packageItems = useMemo(() => {
     return payloadData.map((pItem: any) => {
       const itemDetail = items.find((i: any) => i.id === pItem.id)
-      const rentPricePerItem = itemDetail ? ((itemDetail.price || 0) * (itemDetail.rentPercentage || 0)) / 100 : 0
+      const baseRentPerItem = itemDetail ? ((itemDetail.price || 0) * (itemDetail.rentPercentage || 0)) / 100 : 0
+      const discount = Math.min(100, Math.max(0, Number(pItem.discount) || 0))
+      const netRentPerItem = baseRentPerItem * (1 - (discount / 100))
       return {
         ...pItem,
         imageUrl: itemDetail?.imageUrl || pItem.imageUrl || null,
         categories: itemDetail?.categories || pItem.categories,
         labels: itemDetail?.labels || pItem.labels,
-        rentPricePerItem,
-        totalRent: rentPricePerItem * pItem.qty
+        baseRentPerItem,
+        discount,
+        rentPricePerItem: netRentPerItem,
+        totalRent: netRentPerItem * pItem.qty
       }
     })
   }, [payloadData, items])
@@ -105,8 +109,23 @@ export function PrintPackageDialog({ pkg, items }: PrintPackageDialogProps) {
                           )}
                         </div>
                         <div className="text-right shrink-0">
-                          <div className="text-xs text-zinc-400 print:text-zinc-600 mb-0.5">
-                            {item.qty} Unit × {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.rentPricePerItem)}
+                          <div className="text-xs text-zinc-400 print:text-zinc-600 mb-0.5 flex flex-col items-end">
+                            {item.discount === 100 ? (
+                              <span className="text-emerald-400 print:text-black font-semibold text-[11px]">
+                                {item.qty} Unit (FREE / Bonus - Diskon 100%)
+                              </span>
+                            ) : item.discount > 0 ? (
+                              <span>
+                                {item.qty} Unit × {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.baseRentPerItem)}
+                                <span className="text-amber-400 print:text-black font-semibold text-[10px] ml-1">
+                                  (Disc {item.discount}%)
+                                </span>
+                              </span>
+                            ) : (
+                              <span>
+                                {item.qty} Unit × {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.rentPricePerItem)}
+                              </span>
+                            )}
                           </div>
                           <p className="font-bold text-sm text-blue-400 print:text-black">
                             {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.totalRent)}

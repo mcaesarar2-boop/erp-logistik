@@ -13,11 +13,25 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { packageId, newPackageName, item, quantity = 1 } = body;
+    const { packageId, newPackageName, item, quantity = 1, discount = 0 } = body;
+    const itemDiscount = Math.min(100, Math.max(0, Number(item.discount ?? discount ?? 0)));
+    const itemQty = Math.max(1, Number(quantity) || 1);
+    const lineId = item.lineId || crypto.randomUUID();
 
     // --- LOGIC BIKIN PAKET BARU ---
     if (newPackageName) {
-      const initialPayload = [{ ...item, qty: quantity }];
+      const initialPayload = [{
+        lineId,
+        id: item.id,
+        code: item.code,
+        name: item.name,
+        imageUrl: item.imageUrl || null,
+        price: item.price || 0,
+        rentPercentage: item.rentPercentage || 0,
+        qty: itemQty,
+        discount: itemDiscount,
+        footnote: item.footnote || ""
+      }];
       const newPkg = await prisma.packageTemplate.create({
         data: {
           name: newPackageName,
@@ -41,25 +55,34 @@ export async function POST(req: Request) {
     }
 
     // 2. Parse payload dari JSON string ke Array (Dilengkapi pengaman)
-    let payload = [];
+    let payload: any[] = [];
     try {
       payload = pkg.payload ? JSON.parse(pkg.payload) : [];
+      if (!Array.isArray(payload)) payload = [];
     } catch (e) {
       payload = []; // Fallback aman jika string payload di DB rusak/bukan JSON
     }
 
-    // 3. Cek apakah item sudah ada di dalam paket tersebut
-    const existingIndex = payload.findIndex((i: any) => i.id === item.id);
-    if (existingIndex !== -1) {
-      // PERBAIKAN: Gunakan "qty" agar cocok dengan EditPackageDialog & RentPackageDialog
-      payload[existingIndex].qty = (payload[existingIndex].qty || 0) + quantity;
-      if (item.footnote) {
-        payload[existingIndex].footnote = item.footnote;
-      }
-    } else {
-      // PERBAIKAN: Gunakan "qty" saat push barang baru
-      payload.push({ ...item, qty: quantity });
-    }
+    // Pastikan seluruh baris lama memiliki lineId dan discount
+    payload = payload.map((p: any) => ({
+      ...p,
+      lineId: p.lineId || crypto.randomUUID(),
+      discount: Math.min(100, Math.max(0, Number(p.discount) || 0))
+    }));
+
+    // 3. Independent Line Items: Jangan auto-merge! Selalu tambahkan baris baru dengan lineId mandiri
+    payload.push({
+      lineId,
+      id: item.id,
+      code: item.code,
+      name: item.name,
+      imageUrl: item.imageUrl || null,
+      price: item.price || 0,
+      rentPercentage: item.rentPercentage || 0,
+      qty: itemQty,
+      discount: itemDiscount,
+      footnote: item.footnote || ""
+    });
 
     // 4. Simpan kembali (update) ke database
     const updatedPackage = await prisma.packageTemplate.update({

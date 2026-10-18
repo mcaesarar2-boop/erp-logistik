@@ -624,9 +624,16 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                           </div>
                           <div className="flex flex-col gap-1">
                             {group.items.map((d: any, idx: number) => (
-                              <div key={idx} className="flex justify-between items-start text-xs py-1 border-b border-zinc-850/40 last:border-0 gap-2">
+                              <div key={d.lineId || idx} className="flex justify-between items-start text-xs py-1 border-b border-zinc-850/40 last:border-0 gap-2">
                                 <div className="flex flex-col min-w-0 flex-1">
-                                  <span className="text-zinc-300 truncate font-medium">{d.name} <span className="text-zinc-600 font-mono">({d.code})</span></span>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-zinc-300 truncate font-medium">{d.name} <span className="text-zinc-600 font-mono">({d.code})</span></span>
+                                    {d.discount === 100 ? (
+                                      <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-1.5 py-0.2 rounded">FREE / Bonus</span>
+                                    ) : d.discount > 0 ? (
+                                      <span className="text-[9px] font-semibold text-amber-400 bg-amber-950/60 border border-amber-800/80 px-1.5 py-0.2 rounded">Disc {d.discount}%</span>
+                                    ) : null}
+                                  </div>
                                   {d.footnote && <span className="text-[10px] text-zinc-500 italic truncate" title={d.footnote}>{d.footnote}</span>}
                                 </div>
                                 <span className="font-bold text-emerald-400 shrink-0 mt-0.5 text-[11px]">{d.qty} Unit × {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(d.price)}</span>
@@ -889,12 +896,24 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                   const itemDetail = items.find(i => i.id === pItem.id);
                   if (!itemDetail) return acc;
                   const rentPrice = ((itemDetail.price || 0) * (itemDetail.rentPercentage || 0)) / 100;
-                  return acc + (rentPrice * pItem.qty);
+                  const discount = typeof pItem.discount === 'number' ? Math.max(0, Math.min(100, pItem.discount)) : 0;
+                  const netRentPrice = rentPrice * (1 - (discount / 100));
+                  return acc + (netRentPrice * pItem.qty);
                 }, 0);
 
                 const packageItems = payloadData
-                  .map((pItem: any) => items.find(i => i.id === pItem.id))
-                  .filter((item: Item | undefined): item is Item => !!item);
+                  .map((pItem: any) => {
+                    const itemDetail = items.find(i => i.id === pItem.id);
+                    if (!itemDetail) return null;
+                    return {
+                      ...itemDetail,
+                      lineId: pItem.lineId,
+                      pkgQty: pItem.qty,
+                      pkgFootnote: pItem.footnote,
+                      pkgDiscount: typeof pItem.discount === 'number' ? pItem.discount : 0,
+                    };
+                  })
+                  .filter((item: any): item is any => !!item);
 
                 return (
                   <div key={pkg.id} className="bg-zinc-900/40 border border-zinc-800 rounded-xl p-5 shadow-sm flex flex-col relative group hover:border-zinc-700/80 transition-colors">
@@ -960,17 +979,25 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
 
                           <div className="flex flex-col gap-1">
                             {group.items.map((item: any, idx: number) => {
-                              const pkgItemData = payloadData.find((p:any) => p.id === item.id);
+                              const lineId = item.lineId;
+                              const pkgItemData = payloadData.find((p:any) => lineId ? p.lineId === lineId : p.id === item.id);
+                              const qty = item.pkgQty ?? pkgItemData?.qty ?? 0;
+                              const footnote = item.pkgFootnote ?? pkgItemData?.footnote;
+                              const discount = item.pkgDiscount ?? pkgItemData?.discount ?? 0;
+                              const rentPrice = ((item.price || 0) * (item.rentPercentage || 0)) / 100;
+
+                              const itemImage = item.imageUrl || pkgItemData?.imageUrl || items.find(i => i.id === item.id)?.imageUrl;
+
                               return (
-                                <div key={idx} className="flex justify-between items-start text-xs py-1 border-b border-zinc-850/40 last:border-0 gap-2">
+                                <div key={lineId || `${item.id}-${idx}`} className="flex justify-between items-start text-xs py-1 border-b border-zinc-850/40 last:border-0 gap-2">
                                   <div className="flex items-center gap-2 flex-1 min-w-0">
-                                    {item.imageUrl ? (
+                                    {itemImage ? (
                                        <div 
                                          className="w-7 h-7 rounded border border-zinc-700 overflow-hidden shrink-0 cursor-pointer hover:opacity-75 transition-opacity"
-                                         onClick={() => setSelectedImage(item.imageUrl!)}
+                                         onClick={() => setSelectedImage(itemImage)}
                                          title="Lihat Foto"
                                        >
-                                         <img src={item.imageUrl} className="w-full h-full object-cover" alt="thumb" />
+                                         <img src={itemImage} className="w-full h-full object-cover" alt="thumb" />
                                        </div>
                                     ) : (
                                        <div className="w-7 h-7 rounded border border-zinc-800 bg-zinc-900 shrink-0 flex items-center justify-center text-[8px] text-zinc-600">
@@ -978,13 +1005,27 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                                        </div>
                                     )}
                                     <div className="flex flex-col min-w-0 flex-1">
-                                      <span className="text-zinc-300 truncate font-medium">{item.name}</span>
-                                      {pkgItemData?.footnote && (
-                                        <span className="text-[10px] text-zinc-500 italic truncate" title={pkgItemData.footnote}>{pkgItemData.footnote}</span>
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="text-zinc-300 truncate font-medium">{item.name}</span>
+                                        {discount === 100 ? (
+                                          <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-1.5 py-0.2 rounded">FREE / Bonus</span>
+                                        ) : discount > 0 ? (
+                                          <span className="text-[9px] font-semibold text-amber-400 bg-amber-950/60 border border-amber-800/80 px-1.5 py-0.2 rounded">Disc {discount}%</span>
+                                        ) : null}
+                                      </div>
+                                      {footnote && (
+                                        <span className="text-[10px] text-zinc-500 italic truncate" title={footnote}>{footnote}</span>
                                       )}
                                     </div>
                                   </div>
-                                  <span className="font-bold text-zinc-400 shrink-0 bg-zinc-900 px-2 py-0.5 rounded text-[11px] mt-0.5">{pkgItemData?.qty || 0} Unit</span>
+                                  <div className="flex flex-col items-end shrink-0">
+                                    <span className="font-bold text-zinc-400 bg-zinc-900 px-2 py-0.5 rounded text-[11px] mt-0.5">{qty} Unit</span>
+                                    {discount > 0 ? (
+                                      <span className="text-[10px] text-zinc-500 line-through mt-0.5">
+                                        {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(rentPrice * qty)}
+                                      </span>
+                                    ) : null}
+                                  </div>
                                 </div>
                               );
                             })}
@@ -1245,7 +1286,14 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                                         />
                                       )}
                                       <div className="flex flex-col min-w-0 flex-1">
-                                        <span className="text-zinc-300 truncate font-medium">{p.name}</span>
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <span className="text-zinc-300 truncate font-medium">{p.name}</span>
+                                          {p.discount === 100 ? (
+                                            <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-1 py-0.2 rounded">FREE / Bonus</span>
+                                          ) : p.discount > 0 ? (
+                                            <span className="text-[9px] font-semibold text-amber-400 bg-amber-950/60 border border-amber-800/80 px-1 py-0.2 rounded">Disc {p.discount}%</span>
+                                          ) : null}
+                                        </div>
                                         {itemNote && (
                                           <span className="text-[11px] text-zinc-400 italic truncate" title={itemNote}>
                                             {itemNote}
@@ -1311,7 +1359,14 @@ export default function MultiLayerDashboard({ items, categories, histories, pack
                                                 />
                                               )}
                                               <div className="flex-1 min-w-0 flex flex-col justify-center">
-                                                 <h5 className="font-bold text-sm text-zinc-100 truncate">{pItem.name}</h5>
+                                                 <div className="flex items-center gap-1.5 flex-wrap">
+                                                   <h5 className="font-bold text-sm text-zinc-100 truncate">{pItem.name}</h5>
+                                                   {pItem.discount === 100 ? (
+                                                     <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-1.5 py-0.5 rounded">FREE / Bonus</span>
+                                                   ) : pItem.discount > 0 ? (
+                                                     <span className="text-[10px] font-semibold text-amber-400 bg-amber-950/60 border border-amber-800/80 px-1.5 py-0.5 rounded">Disc {pItem.discount}%</span>
+                                                   ) : null}
+                                                 </div>
                                                  <p className="text-xs text-zinc-500 font-mono">{pItem.code}</p>
                                                  {modalItemNote && <p className="text-[10px] text-zinc-400 italic mt-0.5 truncate" title={modalItemNote}>{modalItemNote}</p>}
                                                  {(pItem.returnedQty > 0) && (

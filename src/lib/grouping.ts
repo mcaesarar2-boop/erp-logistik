@@ -161,10 +161,21 @@ export function generateMarkdownInvoice(invoiceData: any, allItemsLookup?: any[]
     for (const item of group.items) {
       const qty = Number(item.qty) || 1;
       const price = Number(item.price) || 0;
+      const discount = Math.min(100, Math.max(0, Number(item.discount) || 0));
       const totalItemPrice = qty * price;
       const itemNote = (item as any).catatan || (item as any).footnote;
       const noteStr = itemNote && String(itemNote).trim() ? ` *(Catatan: ${String(itemNote).trim()})*` : "";
-      lines.push(`- ${qty} Unit x ${item.name}${noteStr} (${formatRupiah(totalItemPrice)})`);
+
+      let priceStr = "";
+      if (discount === 100 || (totalItemPrice === 0 && discount > 0)) {
+        priceStr = ` (Rp 0 - Diskon 100% / Bonus)`;
+      } else if (discount > 0) {
+        priceStr = ` (${formatRupiah(totalItemPrice)} - Diskon ${discount}%)`;
+      } else {
+        priceStr = ` (${formatRupiah(totalItemPrice)})`;
+      }
+
+      lines.push(`- ${qty} Unit x ${item.name}${noteStr}${priceStr}`);
     }
     lines.push("");
   }
@@ -266,7 +277,8 @@ export function generateMarkdownPackage(pkgData: any, allItemsLookup?: any[]): s
     const price = itemDetail ? itemDetail.price : pItem.price;
     const rentPercentage = itemDetail ? itemDetail.rentPercentage : pItem.rentPercentage;
     const rentPrice = ((price || 0) * (rentPercentage || 0)) / 100;
-    return acc + (rentPrice * (Number(pItem.qty) || 1));
+    const itemDiscount = Math.min(100, Math.max(0, Number(pItem.discount) || 0));
+    return acc + ((rentPrice * (Number(pItem.qty) || 1)) * (1 - (itemDiscount / 100)));
   }, 0);
 
   const packageItems = payloadData.map((pItem: any) => {
@@ -275,6 +287,7 @@ export function generateMarkdownPackage(pkgData: any, allItemsLookup?: any[]): s
       ...(itemDetail || {}),
       ...pItem,
       name: pItem.name || itemDetail?.name || "Aset",
+      discount: Math.min(100, Math.max(0, Number(pItem.discount) || 0)),
     };
   });
 
@@ -305,9 +318,26 @@ export function generateMarkdownPackage(pkgData: any, allItemsLookup?: any[]): s
     lines.push(`**[${group.categoryName}]**`);
     for (const item of group.items) {
       const qty = Number((item as any).qty) || 1;
+      const itemDiscount = Math.min(100, Math.max(0, Number((item as any).discount) || 0));
+      const itemDetail = allItemsLookup?.find((i: any) => i.id === (item as any).id);
+      const price = itemDetail ? itemDetail.price : (item as any).price;
+      const rentPercentage = itemDetail ? itemDetail.rentPercentage : (item as any).rentPercentage;
+      const rentPrice = ((price || 0) * (rentPercentage || 0)) / 100;
+      const lineNetTotal = (rentPrice * qty) * (1 - (itemDiscount / 100));
+
       const itemNote = (item as any).catatan || (item as any).footnote;
       const noteStr = itemNote && String(itemNote).trim() ? ` *(Catatan: ${String(itemNote).trim()})*` : "";
-      lines.push(`- ${qty} Unit x ${(item as any).name}${noteStr}`);
+
+      let priceStr = "";
+      if (itemDiscount === 100) {
+        priceStr = ` (Rp 0 - Diskon 100% / Bonus)`;
+      } else if (itemDiscount > 0) {
+        priceStr = ` (${formatRupiah(lineNetTotal)} - Diskon ${itemDiscount}%)`;
+      } else {
+        priceStr = ` (${formatRupiah(lineNetTotal)})`;
+      }
+
+      lines.push(`- ${qty} Unit x ${(item as any).name}${noteStr}${priceStr}`);
     }
     lines.push("");
   }

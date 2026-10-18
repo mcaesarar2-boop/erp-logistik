@@ -28,6 +28,7 @@ export function AddToPackageDialog({
   const [selectedPackage, setSelectedPackage] = useState("");
   const [newPackageName, setNewPackageName] = useState("");
   const [quantity, setQuantity] = useState<number | "">(1);
+  const [discount, setDiscount] = useState<number | "">(0);
   const [footnote, setFootnote] = useState("");
   const [loading, setLoading] = useState(false);
   const [isDummyUser, setIsDummyUser] = useState(false);
@@ -59,12 +60,14 @@ export function AddToPackageDialog({
           packageId: mode === 'existing' ? selectedPackage : undefined,
           newPackageName: mode === 'new' ? newPackageName : undefined,
           quantity: Number(quantity) || 1,
+          discount: Math.min(100, Math.max(0, Number(discount) || 0)),
           item: {
             id: item.id,
             code: item.code,
             name: item.name,
             price: item.price || 0,
             rentPercentage: item.rentPercentage || 0,
+            discount: Math.min(100, Math.max(0, Number(discount) || 0)),
             footnote: footnote,
           },
         }),
@@ -74,6 +77,7 @@ export function AddToPackageDialog({
         alert(mode === 'new' ? `Berhasil membuat paket ${newPackageName}!` : `Berhasil menambahkan ${item.name} ke paket!`);
         setIsOpen(false);
         setNewPackageName(""); // reset state agar form bersih pas dibuka lagi
+        setDiscount(0); // reset discount
         setFootnote(""); // reset footnote
         router.refresh();
       } else {
@@ -168,27 +172,53 @@ export function AddToPackageDialog({
                 </div>
               )}
 
-              <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-1.5">
-                  Jumlah (Quantity)
-                </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-sm text-zinc-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none font-bold"
-                  value={quantity}
-                  onFocus={(e) => e.target.select()}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val === "" || /^\d+$/.test(val)) {
-                      setQuantity(val === "" ? "" : parseInt(val));
-                    }
-                  }}
-                  onBlur={() => {
-                    if (quantity === "" || Number(quantity) < 1) setQuantity(1);
-                  }}
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-zinc-300 mb-1.5">
+                    Jumlah (Quantity)
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-sm text-zinc-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none font-bold text-center"
+                    value={quantity}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "" || /^\d+$/.test(val)) {
+                        setQuantity(val === "" ? "" : parseInt(val));
+                      }
+                    }}
+                    onBlur={() => {
+                      if (quantity === "" || Number(quantity) < 1) setQuantity(1);
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-zinc-300 mb-1.5">
+                    Diskon Item (%)
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="0"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-sm text-zinc-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none font-bold text-center"
+                    value={discount}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "" || /^\d+$/.test(val)) {
+                        setDiscount(val === "" ? "" : Math.min(100, Math.max(0, parseInt(val))));
+                      }
+                    }}
+                    onBlur={() => {
+                      if (discount === "" || Number(discount) < 0) setDiscount(0);
+                    }}
+                  />
+                </div>
               </div>
 
               <div>

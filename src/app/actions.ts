@@ -401,60 +401,80 @@ export async function checkoutRental(formData: FormData) {
     }
 
     await prisma.$transaction(async (tx) => {
-      // 1. Validasi & Kurangi Stok Barang Fisik
+      // 1. Validasi & Kurangi Stok Barang Fisik (Akumulasikan kuantitas per itemId dari seluruh baris)
       if (cartItems.length > 0) {
-        const itemIds = cartItems.map(item => item.id);
+        const requestedQtyMap = new Map<string, number>();
+        for (const item of cartItems) {
+          const cur = requestedQtyMap.get(item.id) || 0;
+          requestedQtyMap.set(item.id, cur + (Number(item.qty) || 1));
+        }
+
+        const itemIds = Array.from(requestedQtyMap.keys());
         const dbItems = await tx.item.findMany({
           where: { id: { in: itemIds } }
         });
         const dbItemMap = new Map(dbItems.map(i => [i.id, i]));
 
-        for (const item of cartItems) {
-          const dbItem = dbItemMap.get(item.id);
-          if (!dbItem) throw new Error(`Barang dengan ID ${item.id} tidak ditemukan.`);
-          const requestedQty = Number(item.qty) || 1;
-          if (dbItem.quantity < requestedQty) {
-            throw new Error(`Stok tersedia untuk "${dbItem.name}" tidak mencukupi (Tersedia: ${dbItem.quantity}, Diminta: ${requestedQty}).`);
+        for (const [itemId, totalQty] of requestedQtyMap.entries()) {
+          const dbItem = dbItemMap.get(itemId);
+          if (!dbItem) throw new Error(`Barang dengan ID ${itemId} tidak ditemukan.`);
+          if (dbItem.quantity < totalQty) {
+            throw new Error(`Stok tersedia untuk "${dbItem.name}" tidak mencukupi (Tersedia: ${dbItem.quantity}, Total Diminta: ${totalQty}).`);
           }
         }
 
         await Promise.all(
-          cartItems.map(item => {
-            const dbItem = dbItemMap.get(item.id)!;
-            const requestedQty = Number(item.qty) || 1;
+          Array.from(requestedQtyMap.entries()).map(([itemId, totalQty]) => {
+            const dbItem = dbItemMap.get(itemId)!;
             return tx.item.update({
-              where: { id: item.id },
+              where: { id: itemId },
               data: {
-                quantity: dbItem.quantity - requestedQty,
-                rentedQuantity: dbItem.rentedQuantity + requestedQty
+                quantity: dbItem.quantity - totalQty,
+                rentedQuantity: dbItem.rentedQuantity + totalQty
               }
             });
           })
         );
       }
 
-      // 2. Susun Snapshot Payload untuk Transaksi / Invoice Baru
+      // 2. Susun Snapshot Payload untuk Transaksi / Invoice Baru (Sertakan lineId dan Diskon Item)
       const newItemsPayload = [
-        ...cartItems.map((c: any) => ({
-          id: c.id,
-          name: c.name,
-          code: c.code,
-          qty: Number(c.qty) || 1,
-          returnedQty: 0,
-          imageUrl: c.imageUrl || null,
-          price: (((c.price || 0) * (c.rentPercentage || 0)) / 100) * rentalDays * (1 - (discountPercentage / 100)),
-          footnote: c.footnote || ""
-        })),
-        ...customItems.map((c: any) => ({
-          id: c.id,
-          name: c.name,
-          code: "LAYANAN",
-          qty: Number(c.qty) || 1,
-          returnedQty: 0,
-          imageUrl: null,
-          price: (Number(c.price) || 0) * rentalDays * (1 - (discountPercentage / 100)),
-          footnote: c.footnote || "Layanan Tambahan"
-        }))
+        ...cartItems.map((c: any) => {
+          const itemDiscount = Math.max(0, Math.min(100, Number(c.discount) || 0));
+          const baseRentPerItem = ((c.price || 0) * (c.rentPercentage || 0)) / 100;
+          const netRentPerItem = baseRentPerItem * (1 - (itemDiscount / 100));
+          return {
+            lineId: c.lineId || crypto.randomUUID(),
+            id: c.id,
+            name: c.name,
+            code: c.code,
+            qty: Number(c.qty) || 1,
+            returnedQty: 0,
+            imageUrl: c.imageUrl || null,
+            basePrice: baseRentPerItem,
+            discount: itemDiscount,
+            price: netRentPerItem * rentalDays * (1 - (discountPercentage / 100)),
+            footnote: c.footnote || ""
+          };
+        }),
+        ...customItems.map((c: any) => {
+          const itemDiscount = Math.max(0, Math.min(100, Number(c.discount) || 0));
+          const basePrice = Number(c.price) || 0;
+          const netPrice = basePrice * (1 - (itemDiscount / 100));
+          return {
+            lineId: c.lineId || crypto.randomUUID(),
+            id: c.id,
+            name: c.name,
+            code: "LAYANAN",
+            qty: Number(c.qty) || 1,
+            returnedQty: 0,
+            imageUrl: null,
+            basePrice: basePrice,
+            discount: itemDiscount,
+            price: netPrice * rentalDays * (1 - (discountPercentage / 100)),
+            footnote: c.footnote || "Layanan Tambahan"
+          };
+        })
       ];
 
       const totalPhysicalQty = cartItems.reduce((acc: number, i: any) => acc + (Number(i.qty) || 1), 0);
@@ -470,7 +490,7 @@ export async function checkoutRental(formData: FormData) {
           throw new Error("Event yang dituju tidak ditemukan di database.");
         }
 
-        // Parse payload event lama dan gabungkan item baru ke dalamnya
+        // Parse payload event lama dan tambahkan item baru sebagai baris mandiri tanpa auto-merge
         let existingEventPayload: any[] = [];
         try {
           existingEventPayload = JSON.parse(existingEvent.payload || "[]");
@@ -478,17 +498,8 @@ export async function checkoutRental(formData: FormData) {
           existingEventPayload = [];
         }
 
-        // Gabungkan / append item baru ke payload event lama
         for (const newItem of newItemsPayload) {
-          const matchIndex = existingEventPayload.findIndex(
-            (p: any) => p.id === newItem.id && (p.footnote || "") === (newItem.footnote || "")
-          );
-          if (matchIndex >= 0) {
-            existingEventPayload[matchIndex].qty = (Number(existingEventPayload[matchIndex].qty) || 0) + newItem.qty;
-            existingEventPayload[matchIndex].returnedQty = Number(existingEventPayload[matchIndex].returnedQty) || 0;
-          } else {
-            existingEventPayload.push({ ...newItem, returnedQty: 0 });
-          }
+          existingEventPayload.push({ ...newItem, returnedQty: 0 });
         }
 
         // Update record event lama (pastikan tidak ada flag [SELESAI])

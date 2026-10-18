@@ -136,11 +136,26 @@ export function ReprintInvoiceDialog({ history, children }: ReprintInvoiceDialog
                             </div>
                           </div>
                           <div className="text-right shrink-0">
-                            <div className="text-xs text-zinc-400 print:text-zinc-600 mb-0.5">
-                              {item.qty} Unit × {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(originalPricePerItem)}
+                            <div className="text-xs text-zinc-400 print:text-zinc-600 mb-0.5 flex flex-col items-end">
+                              {Number((item as any).discount) === 100 ? (
+                                <span className="text-emerald-400 print:text-black font-semibold text-[11px]">
+                                  {item.qty} Unit (FREE / Bonus - Diskon 100%)
+                                </span>
+                              ) : Number((item as any).discount) > 0 ? (
+                                <span>
+                                  {item.qty} Unit × {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(originalPricePerItem)}
+                                  <span className="text-amber-400 print:text-black font-semibold text-[10px] ml-1">
+                                    (Disc {(item as any).discount}%)
+                                  </span>
+                                </span>
+                              ) : (
+                                <span>
+                                  {item.qty} Unit × {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(originalPricePerItem)}
+                                </span>
+                              )}
                             </div>
                             <p className="font-bold text-sm text-emerald-400 print:text-black">
-                              {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(originalPricePerItem * item.qty)}
+                              {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.price * item.qty)}
                             </p>
                           </div>
                         </div>
