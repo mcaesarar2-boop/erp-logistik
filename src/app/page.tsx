@@ -19,15 +19,30 @@ export default async function DashboardPage() {
     rawMasterLabels,
     eventDetails,
   ] = await Promise.all([
-    prisma.item.findMany({
-      include: {
-        categories: true,
-      },
-    }),
-    prisma.category.findMany(),
-    prisma.history.findMany({
-      orderBy: { date: "desc" },
-    }),
+    prisma.item
+      .findMany({
+        include: {
+          categories: true,
+        },
+      })
+      .catch((e) => {
+        console.error("Dashboard: Error fetching items:", e);
+        return [];
+      }),
+    prisma.category
+      .findMany()
+      .catch((e) => {
+        console.error("Dashboard: Error fetching categories:", e);
+        return [];
+      }),
+    prisma.history
+      .findMany({
+        orderBy: { date: "desc" },
+      })
+      .catch((e) => {
+        console.error("Dashboard: Error fetching history:", e);
+        return [];
+      }),
     prisma.packageTemplate
       .findMany({
         orderBy: { createdAt: "desc" },
