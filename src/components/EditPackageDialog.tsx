@@ -234,8 +234,8 @@ export function EditPackageDialog({ pkg, items, masterCategories = [], masterLab
           <Pencil className="w-4 h-4" />
         </button>
       </DialogTrigger>
-      <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-50 flex flex-col w-[95vw] sm:w-[90vw] max-w-5xl sm:max-w-5xl lg:max-w-6xl h-[90vh] max-h-[90vh] overflow-hidden p-4 sm:p-6">
-        <DialogHeader className="shrink-0 pb-3 border-b border-zinc-800">
+      <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-50 flex flex-col w-[95vw] sm:w-[90vw] max-w-5xl sm:max-w-5xl lg:max-w-6xl h-[92vh] max-h-[92vh] overflow-hidden p-4 sm:p-5">
+        <DialogHeader className="shrink-0 pb-2.5 border-b border-zinc-800">
           <DialogTitle className="text-base sm:text-lg font-bold">Edit Template Paket Rental</DialogTitle>
         </DialogHeader>
         {errorMsg && (
@@ -244,10 +244,10 @@ export function EditPackageDialog({ pkg, items, masterCategories = [], masterLab
           </div>
         )}
 
-        <form action={handleSubmit} className="flex-1 flex flex-col min-h-0 overflow-y-auto lg:overflow-hidden pt-3">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-0">
+        <form action={handleSubmit} className="flex-1 flex flex-col min-h-0 overflow-y-auto lg:overflow-hidden pt-2">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-0 h-full">
             {/* Kolom Kiri: Metadata & Pencarian Aset (lg:col-span-5) */}
-            <div className="lg:col-span-5 flex flex-col gap-4 overflow-y-visible lg:overflow-y-auto pr-0 lg:pr-2 min-h-0">
+            <div className="lg:col-span-5 flex flex-col gap-3.5 overflow-y-visible lg:overflow-y-auto pr-0 lg:pr-2 min-h-0 h-full">
               <div className="space-y-1.5">
                 <Label>Nama Paket</Label>
                 <Input name="name" placeholder="Misal: Paket Panggung A" className="bg-zinc-900 border-zinc-800" value={packageName} onChange={e => setPackageName(e.target.value)} required />
@@ -390,7 +390,7 @@ export function EditPackageDialog({ pkg, items, masterCategories = [], masterLab
             </div>
 
             {/* Kolom Kanan (lg:col-span-7 flex flex-col): Bagian Daftar Barang dalam Paket */}
-            <div className="lg:col-span-7 flex flex-col min-h-0 flex-1">
+            <div className="lg:col-span-7 flex flex-col min-h-0 h-full flex-1 justify-between">
               <div className="flex items-center justify-between pb-2 shrink-0">
                 <div className="flex items-center gap-2">
                   <Label className="text-sm font-bold text-zinc-200">Daftar Barang dalam Paket</Label>
@@ -410,9 +410,9 @@ export function EditPackageDialog({ pkg, items, masterCategories = [], masterLab
               </div>
 
               {/* Area Scroll List Barang */}
-              <div className="flex-1 overflow-y-auto min-h-[350px] lg:min-h-[450px] pr-2 space-y-3">
+              <div className="flex-1 min-h-0 overflow-y-auto pr-2 space-y-3">
                 {cart.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center p-8 border border-dashed border-zinc-800 rounded-xl text-center text-zinc-500 min-h-[250px]">
+                  <div className="h-full flex flex-col items-center justify-center p-6 border border-dashed border-zinc-800 rounded-xl text-center text-zinc-500 min-h-[160px]">
                     <Package className="w-10 h-10 text-zinc-600 mb-2 stroke-1" />
                     <p className="text-sm font-medium">Belum ada barang dalam paket ini.</p>
                     <p className="text-xs text-zinc-600 mt-1">Cari aset di kolom kiri dan klik untuk menambahkannya.</p>
