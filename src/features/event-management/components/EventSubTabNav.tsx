@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Users, DollarSign, Package, Coffee, Mic, CalendarDays, Edit3 } from "lucide-react";
+import { Users, DollarSign, Package, Coffee, Mic, CalendarDays, Edit3, Printer } from "lucide-react";
 import type { EventDetailData, AvailableEventSummary, BudgetingStats, EventSubTabType } from "../types";
 
 interface EventSubTabNavProps {
@@ -24,7 +24,7 @@ export function EventSubTabNav({
   onToggleEditEventInfo,
 }: EventSubTabNavProps) {
   return (
-    <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-2 sm:p-2.5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-sm">
+    <div className="print:hidden bg-zinc-900/40 border border-zinc-800 rounded-2xl p-2 sm:p-2.5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-sm">
       <div className="flex flex-wrap items-center gap-2">
         {/* Sub-Tab 1: Overview */}
         <button
@@ -133,11 +133,35 @@ export function EventSubTabNav({
             {eventDetail?.timelineItems?.length || 0}
           </span>
         </button>
+
+        {/* Sub-Tab 7: Laporan & Cetak (Sheet) */}
+        <button
+          type="button"
+          onClick={() => onSelectSubTab("report")}
+          className={`whitespace-nowrap flex items-center gap-2 py-2 px-3.5 font-semibold text-xs sm:text-sm transition-all rounded-xl cursor-pointer ${
+            activeSubTab === "report"
+              ? "bg-teal-950/70 border border-teal-500/80 text-teal-300 ring-1 ring-teal-500/40 shadow-sm"
+              : "bg-zinc-900/80 border border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 hover:border-zinc-700"
+          }`}
+        >
+          <Printer className="w-4 h-4 text-teal-400 shrink-0" />
+          <span>Laporan & Cetak (Sheet)</span>
+        </button>
       </div>
 
-      {/* Info ID & Edit Button */}
+      {/* Info ID, Shortcut & Edit Button */}
       {eventDetail && (
         <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
+          <button
+            type="button"
+            onClick={() => onSelectSubTab("report")}
+            className="whitespace-nowrap inline-flex items-center gap-1.5 px-3 py-2 bg-teal-950/70 hover:bg-teal-900/80 border border-teal-700/70 hover:border-teal-600 rounded-xl text-xs font-semibold text-teal-300 transition-colors cursor-pointer shadow-xs"
+            title="Buka Laporan Master Sheet & Cetak Dokumen"
+          >
+            <Printer className="w-3.5 h-3.5 text-teal-400" />
+            <span>Cetak / Salin Laporan</span>
+          </button>
+
           <button
             onClick={onToggleEditEventInfo}
             className="whitespace-nowrap inline-flex items-center gap-1.5 px-3 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 hover:border-zinc-600 rounded-xl text-xs font-semibold text-zinc-300 transition-colors cursor-pointer shadow-xs"

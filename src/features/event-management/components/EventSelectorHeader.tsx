@@ -25,7 +25,7 @@ export function EventSelectorHeader({
   onOpenStandaloneDialog,
 }: EventSelectorHeaderProps) {
   return (
-    <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-5 sm:p-6 shadow-xl backdrop-blur-sm relative overflow-hidden">
+    <div className="print:hidden bg-zinc-900/60 border border-zinc-800 rounded-2xl p-5 sm:p-6 shadow-xl backdrop-blur-sm relative overflow-hidden">
       {/* Glow accent */}
       <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
 

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import dynamic from "next/dynamic";
 import { Calendar, Plus } from "lucide-react";
 import { useAuthPermission } from "@/shared/hooks/useAuthPermission";
 import { DemoRestrictionDialog } from "@/shared/components/DemoRestrictionDialog";
@@ -17,6 +18,18 @@ import { EventGuestStarTab } from "./guest-star/EventGuestStarTab";
 import { EventTimelineTab } from "./timeline/EventTimelineTab";
 import { MasterTimelineModal } from "./timeline/MasterTimelineModal";
 import type { EventDetailData } from "../types";
+
+const EventReportSubTab = dynamic(
+  () => import("./report/EventReportSubTab").then((mod) => mod.EventReportSubTab),
+  {
+    loading: () => (
+      <div className="p-12 text-center text-zinc-400">
+        Memuat Laporan & Lembar Cetak...
+      </div>
+    ),
+    ssr: false,
+  }
+);
 
 export interface EventManagementContainerProps {
   histories: any[];
@@ -172,6 +185,15 @@ export function EventManagementContainer({
                   isDummyUser={isDummyUser}
                   onShowDemoWarning={() => setShowDemoWarning(true)}
                   onUpdateEventDetail={setEventDetail}
+                />
+              )}
+
+              {activeSubTab === "report" && (
+                <EventReportSubTab
+                  eventDetail={eventDetail}
+                  currentSelectedSummary={currentSelectedSummary}
+                  budgetingStats={budgetingStats}
+                  items={items}
                 />
               )}
             </>

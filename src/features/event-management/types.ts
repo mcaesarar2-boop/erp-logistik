@@ -154,5 +154,14 @@ export interface BudgetingStats {
   isSurplus: boolean;
 }
 
-export type EventSubTabType = "overview" | "budgeting" | "equipment" | "utility" | "gueststar" | "timeline";
+export interface EventReportSectionFilters {
+  operational: boolean;
+  budgeting: boolean;
+  equipment: boolean;
+  utility: boolean;
+  guestStars: boolean;
+  timeline: boolean;
+}
+
+export type EventSubTabType = "overview" | "budgeting" | "equipment" | "utility" | "gueststar" | "timeline" | "report";
 
